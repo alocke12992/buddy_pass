@@ -93,7 +93,8 @@ Maybe use Turborepo to manage the monorepo
 - AI Connection - AWS Bedrock
 
 ## Ingesting pre-defined data
-I think i can start with MVP, with a small seed / mock file to get the app working, then add more data later.
+Use this open source project to clone the exercises: https://github.com/yuhonas/free-exercise-db 
+NOTE: Might need to modify our schema to match theirs ( e.g. primaryMuscles and secondaryMuscles - should update our schema + add this to how we generate workouts / track recovery time)
 
 ## Tables
 

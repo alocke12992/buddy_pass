@@ -8,6 +8,14 @@ Pre-implementation — no application code exists yet. The product spec is `plan
 
 Until the user directs otherwise, do not scaffold code, choose dependencies, or create framework files. The active working surface is the skills in `.devin/skills/`.
 
+## Design system
+
+The visual design language is settled and lives in `docs/design-system.md` — read it before any UI work. Binding rules:
+
+- **Dark-first, energetic.** Volt (`#C8F542`) always means *you* (actions, progress, success); violet (`#A78BFA`) always means *buddies* (presence, sync, invites). Never mix them; volt doubles as the success color.
+- **Tokens only.** Feature code consumes semantic CSS variables / shadcn tokens, never raw hexes. Status enums map to fixed colors per the doc's status table.
+- **Glanceable numbers.** `tabular-nums` on all numeric data; Inter only; Lucide icons only; 56px touch targets for mid-workout controls.
+
 ## Skills
 
 Reusable procedures and reference live in `.devin/skills/<name>/SKILL.md`, following the Devin/Cascade skill convention. Before authoring or editing any skill, use the `writing-great-skills` skill — it is the authority on structure and pruning, and its `GLOSSARY.md` defines the vocabulary the other skills share.

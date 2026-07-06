@@ -4,9 +4,16 @@ Root instructions for any agent working in this repo. This file loads on every m
 
 ## Project status
 
-Phase 0 (scaffold) complete. The plan of record is `plans/MVP.md` — grilled and refined from the original brain-dump `plans/INIT.md` (treat INIT as history, not current design). Build phases, schema, and all architecture decisions live in the MVP plan.
+Phase 0 (scaffold) complete at `9abc71a`; **next is Phase 1** (Drizzle schema + free-exercise-db ingestion). The plan of record is `plans/MVP.md` — decisions in §2, schema in §4, per-phase progress in §9. `plans/INIT.md` is the original brain-dump (history, not current design).
 
-Monorepo: pnpm + Turborepo. `apps/api` (Fastify + tRPC), `apps/web` (Vite React SPA, Tailwind v4 + shadcn/ui), `packages/shared` (zod schemas/utils), `packages/db` (Drizzle, schema lands in Phase 1).
+Monorepo: pnpm + Turborepo. `apps/api` (Fastify + tRPC on :3000), `apps/web` (Vite React SPA on :5173, Tailwind v4 + shadcn/ui), `packages/shared` (zod schemas/utils), `packages/db` (Drizzle client factory; schema lands Phase 1).
+
+## Daily dev
+
+```sh
+docker compose up -d    # Postgres 17 only
+pnpm dev                # api (tsx watch) + web (Vite, proxies /trpc + /api)
+```
 
 ## Verification (run before considering work done)
 

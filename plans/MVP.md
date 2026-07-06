@@ -1,6 +1,8 @@
 # Buddy Pass — MVP Plan
 
 > Refined from `INIT.md` via grilling session on 2026-07-06. INIT.md remains the original brain-dump; this is the source of truth for the MVP build.
+>
+> **Status:** Phase 0 (scaffold) complete — see §9 for per-phase progress. Next: Phase 1 (schema + ingestion).
 
 **Vision:** "Multiplayer" workouts — create and share workouts with friends, track and compare progress, eventually work out together in real time. The share/clone loop is the growth engine: anyone can receive a workout link and start using it *without signing up*.
 
@@ -53,6 +55,9 @@
 | CI/CD | GH Actions: PR checks, **auto-deploy main** | Lint/typecheck/test/build on PR; build → ECR → deploy on merge |
 | Exercise images | Ingest once to **S3**, env-based base URL | No GitHub hotlinking in prod; local dev uses a static folder |
 | Testing | **Vitest** unit + integration vs real Postgres (testcontainers) | Clone/merge/visibility logic lives at the DB boundary; mocks lie |
+| Workspace packages *(Phase 0)* | Consumed as **TS source** (`exports` → `src/`); api bundles them via tsup `noExternal`; web imports **types only** from `@buddy-pass/api/router` | No build orchestration in dev; single prod artifact; type boundary stays honest |
+| Local dev shape *(Phase 0)* | Compose default = **postgres only**; api/web run on host (`pnpm dev`); `--profile full` = prod-parity images | Fast HMR on macOS; the real Caddy→api→postgres stack is still one command away |
+| Node / Postgres *(Phase 0)* | **Node 22 LTS** (was 24 in plan), **Postgres 17** | Local toolchain parity; solid RDS support; UUIDv7 generated app-side so PG18 not needed |
 
 ---
 
@@ -61,14 +66,14 @@
 ```
 buddy_pass/
 ├── apps/
-│   ├── api/            # Fastify + tRPC + better-auth + OG share pages
-│   └── web/            # Vite React SPA
+│   ├── api/            # ✅ Fastify + tRPC (better-auth + OG share pages arrive Phase 2/5)
+│   └── web/            # ✅ Vite React SPA (Router, React Query, Tailwind v4, shadcn/ui)
 ├── packages/
-│   ├── db/             # Drizzle schema, migrations, seed/ingestion scripts
-│   └── shared/         # Zod schemas, domain types, shared utils (unit conversion, etc.)
-├── infra/              # Terraform (VPC, EC2, RDS, S3, ECR, IAM)
-├── docker-compose.yml  # local dev: postgres + api + web
-└── turbo.json
+│   ├── db/             # ✅ skeleton (Drizzle client factory; schema/migrations/seeds = Phase 1)
+│   └── shared/         # ✅ Zod schemas, domain types, unit conversion
+├── infra/              # Terraform (VPC, EC2, RDS, S3, ECR, IAM) — Phase 2.5
+├── docker-compose.yml  # ✅ postgres (default) + api/web under --profile full
+└── turbo.json          # ✅
 ```
 
 - `apps/mobile` (React Native/Expo) slots in later, reusing `packages/shared` + the tRPC client. shadcn/ui does not transfer; UI is per-platform.
@@ -214,10 +219,11 @@ Create (from library or clone) → `planned` → Start (`in_progress`, `started_
 
 ## 7. Local Dev, Testing, CI/CD, Production
 
-### Local (docker compose)
-- `postgres` (matching RDS major version), `api` (tsx watch), `web` (vite dev) — same Dockerfiles as prod with dev overrides
-- `pnpm db:migrate && pnpm db:seed` for setup; `.env.example` documented
-- Node 22 LTS (matches local toolchain; supported to Apr 2027), pnpm; ESLint + Prettier
+### Local (as built in Phase 0)
+- Daily dev: `docker compose up -d` (Postgres 17 only) + `pnpm dev` (api via tsx watch on :3000, web via Vite on :5173 proxying `/trpc` + `/api`)
+- Prod parity on demand: `docker compose --profile full up --build` — the real images (Caddy-served SPA on :8080 → api container → postgres), same shape that ships to EC2
+- `pnpm db:migrate && pnpm db:seed` for setup (lands Phase 1); `.env.example` documented
+- Node 22 LTS (matches local toolchain; supported to Apr 2027), pnpm 10 + Turborepo; ESLint 10 (flat) + Prettier (code only — prose dirs ignored)
 
 ### Testing
 - **Vitest** everywhere; Turborepo runs per-package
@@ -226,8 +232,8 @@ Create (from library or clone) → `planned` → Start (`in_progress`, `started_
 - Playwright E2E deferred until the UI stabilizes (first candidate: share → guest clone → signup merge)
 
 ### CI/CD (GitHub Actions)
-- **PR:** turbo lint + typecheck + test + build (remote caching)
-- **Merge to main:** build images → push ECR → run drizzle migrations against RDS → SSM/SSH to EC2 → `compose pull && compose up -d`
+- **PR + main:** ✅ format check + turbo lint/typecheck/test/build (`.github/workflows/ci.yml`)
+- **Merge to main (deploy — Phase 2.5):** build images → push ECR → run drizzle migrations against RDS → SSM/SSH to EC2 → `compose pull && compose up -d`
 - Secrets in GH Actions secrets + `.env` on the box (SSM Parameter Store when it grows)
 
 ### Production (Terraform in `infra/`)
@@ -250,15 +256,21 @@ Create (from library or clone) → `planned` → Start (`in_progress`, `started_
 
 ## 9. Build Order
 
-| Phase | Deliverable                                                                                                                                         |
-| -------| -----------------------------------------------------------------------------------------------------------------------------------------------------|
-| 0     | Scaffold: Turborepo + pnpm, tsconfig/eslint/prettier, docker compose, CI skeleton (lint/typecheck/test on PR)                                       |
-| 1     | `packages/db`: Drizzle schema (§4) + migrations; ingestion/seed pipeline (§6)                                                                       |
-| 2     | Auth: better-auth (email/password + anonymous) wired into Fastify + tRPC context; onboarding (stats/settings)                                       |
-| 2.5   | **Deploy early:** Terraform prod stack + deploy pipeline live with just auth + library browsing — derisks infra assumptions before features pile up |
-| 3     | Workout builder + logging: exercise picker (search/filter), sets/supersets, logging UX, history                                                     |
-| 4     | Progress: volume-over-time, body-weight chart, profile stats                                                                                        |
-| 5     | Social: friend links, friends list, visibility enforcement, share links + OG page, guest clone, merge-on-signup, link revocation                    |
-| 6     | Polish: empty states, error handling, responsive pass, rate limiting, guest-cleanup job                                                             |
+| Phase | Status | Deliverable                                                                                                                                         |
+| -------| --------| -----------------------------------------------------------------------------------------------------------------------------------------------------|
+| 0     | ✅ done (`9abc71a`) | Scaffold: Turborepo + pnpm, tsconfig/eslint/prettier, docker compose, CI skeleton (lint/typecheck/test on PR)                                       |
+| 1     | next   | `packages/db`: Drizzle schema (§4) + migrations; ingestion/seed pipeline (§6)                                                                       |
+| 2     | —      | Auth: better-auth (email/password + anonymous) wired into Fastify + tRPC context; onboarding (stats/settings)                                       |
+| 2.5   | —      | **Deploy early:** Terraform prod stack + deploy pipeline live with just auth + library browsing — derisks infra assumptions before features pile up |
+| 3     | —      | Workout builder + logging: exercise picker (search/filter), sets/supersets, logging UX, history                                                     |
+| 4     | —      | Progress: volume-over-time, body-weight chart, profile stats                                                                                        |
+| 5     | —      | Social: friend links, friends list, visibility enforcement, share links + OG page, guest clone, merge-on-signup, link revocation                    |
+| 6     | —      | Polish: empty states, error handling, responsive pass, rate limiting, guest-cleanup job                                                             |
 
 Then fast-follow #1 (generation) gets its own planning round.
+
+### Phase 0 delivery notes (2026-07-06)
+
+- Everything verified end-to-end: 14/14 turbo tasks green; tRPC ping flows web → Vite proxy → api with superjson `Date` round-trip; both Docker images build and the `--profile full` stack came up healthy behind Caddy on :8080
+- Beyond the plan line-item: shadcn/ui initialized (button seeded), Prettier format check added to CI, `AGENTS.md` carries the verification commands + toolchain gotchas (TS 6 `baseUrl` removal, react-hooks v7 flat config, pnpm 10 `onlyBuiltDependencies` / `deploy --legacy`)
+- api Docker image = tsup bundle + `pnpm deploy --legacy --prod` pruned runtime; web Docker image = Caddy serving static build + proxying `/trpc` `/api` `/s/` `/f/` `/health`

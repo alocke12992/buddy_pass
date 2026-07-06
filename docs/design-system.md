@@ -15,16 +15,16 @@ All tokens are expressed as CSS variables so they map directly onto shadcn/ui + 
 
 ### Neutrals (dark theme)
 
-| Token | Hex | Use |
-|---|---|---|
-| `--bg` | `#0B0B0E` | App background |
-| `--surface-1` | `#141419` | Cards, sheets |
-| `--surface-2` | `#1D1D24` | Nested cards, inputs, hover |
-| `--surface-3` | `#26262F` | Active/pressed, popovers |
-| `--border` | `#2C2C36` | Hairlines, dividers |
-| `--text` | `#F4F4F6` | Primary text |
-| `--text-muted` | `#9A9AA6` | Labels, secondary text |
-| `--text-faint` | `#5C5C68` | Placeholders, disabled |
+| Token          | Hex       | Use                         |
+| ----------------| -----------| -----------------------------|
+| `--bg`         | `#0B0B0E` | App background              |
+| `--surface-1`  | `#141419` | Cards, sheets               |
+| `--surface-2`  | `#1D1D24` | Nested cards, inputs, hover |
+| `--surface-3`  | `#26262F` | Active/pressed, popovers    |
+| `--border`     | `#2C2C36` | Hairlines, dividers         |
+| `--text`       | `#F4F4F6` | Primary text                |
+| `--text-muted` | `#9A9AA6` | Labels, secondary text      |
+| `--text-faint` | `#5C5C68` | Placeholders, disabled      |
 
 Elevation on dark = lighter surface + border, **not** drop shadows. Shadows are reserved for overlays (dialogs, sheets).
 

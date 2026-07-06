@@ -13,7 +13,11 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "db:generate": "pnpm --filter @buddy-pass/db db:generate",
+    "db:migrate": "pnpm --filter @buddy-pass/db db:migrate",
+    "db:seed": "pnpm --filter @buddy-pass/db db:seed",
+    "db:studio": "pnpm --filter @buddy-pass/db db:studio"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -22,6 +22,8 @@ corepack enable            # pnpm via packageManager pin
 pnpm install
 cp .env.example .env
 docker compose up -d       # postgres only
+pnpm db:migrate            # apply drizzle migrations
+pnpm db:seed               # exercise library (873) + demo data
 pnpm dev                   # api on :3000, web on :5173 (proxies /trpc + /api)
 ```
 

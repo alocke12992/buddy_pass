@@ -2,7 +2,7 @@
 
 > Refined from `INIT.md` via grilling session on 2026-07-06. INIT.md remains the original brain-dump; this is the source of truth for the MVP build.
 >
-> **Status:** Phase 0 (scaffold) complete — see §9 for per-phase progress. Next: Phase 1 (schema + ingestion).
+> **Status:** Phases 0–1 complete (scaffold; schema + ingestion) — see §9 for per-phase progress. Next: Phase 2 (auth + onboarding).
 
 **Vision:** "Multiplayer" workouts — create and share workouts with friends, track and compare progress, eventually work out together in real time. The share/clone loop is the growth engine: anyone can receive a workout link and start using it *without signing up*.
 
@@ -151,14 +151,17 @@ workouts           owner_id FK → user,
                    -- INIT.md's date → scheduled_for; user_id+creator_id → owner_id
                    --   (attribution for clones = origin chain)
 
-workout_exercises  workout_id FK, exercise_id FK, order,
+workout_exercises  workout_id FK, exercise_id FK, position,
                    super_set_id? (uuid, groups exercises into a superset)
-                   UNIQUE (workout_id, order)
+                   INDEX (workout_id, position)
+                   -- (as built) named position, not order: avoids a quoted reserved
+                   --   word in raw SQL; no UNIQUE on position so drag-reorder can
+                   --   shuffle rows freely — ordering is app-maintained
 
-workout_sets       workout_exercise_id FK, order, is_warmup bool,
-                   reps int, weight_kg numeric, rest_seconds int,
+workout_sets       workout_exercise_id FK, position, is_warmup bool,
+                   reps int, weight_kg numeric(6,2), rest_seconds int default 90,
                    completed_at? timestamptz   -- null = not done; doubles as timestamp
-                   UNIQUE (workout_exercise_id, order)
+                   INDEX (workout_exercise_id, position)
                    -- no denormalized workout_id; reachable via workout_exercises.
                    --   add later only if a hot query demands it
                    -- last set's rest not auto-played (UI concern, per INIT.md)
@@ -168,7 +171,9 @@ workout_sets       workout_exercise_id FK, order, is_warmup bool,
 ```
 user_friends       user_id FK, friend_id FK,
                    status ('pending'|'accepted'),  -- MVP always writes 'accepted'
-                   UNIQUE (least(user_id,friend_id), greatest(user_id,friend_id))
+                   CHECK (user_id < friend_id) + UNIQUE (user_id, friend_id)
+                   -- (as built) canonical pair ordering enforced by CHECK instead of a
+                   --   least/greatest expression index — simpler, same guarantee
                    -- opening a friend link = mutual consent → instant friendship;
                    -- 'pending' reserved for future search-based requests
 
@@ -206,14 +211,14 @@ Create (from library or clone) → `planned` → Start (`in_progress`, `started_
 
 ---
 
-## 6. Seed / Ingestion Pipeline (`packages/db`)
+## 6. Seed / Ingestion Pipeline (`packages/db`) — ✅ built in Phase 1
 
-1. Fetch `dist/exercises.json` from free-exercise-db (vendor the JSON commit-pinned)
-2. Upsert `equipments` + `muscle_groups` from the fixed vocab
-3. Upsert `exercises` (keyed by `slug`) + `exercise_muscles` (primary/secondary roles)
-4. Sync images to S3 (`exercises/<slug>/<n>.jpg`) — DB stores relative paths; base URL from env (`IMAGE_BASE_URL`): local dev = static folder or dev bucket, prod = S3 (CloudFront later)
-5. Nulls in source `force`/`mechanic`/`equipment` stay null — future generator excludes unlabeled exercises from push/pull selection rather than guessing
-6. Idempotent: safe to re-run (upserts); also seeds a demo user + sample workouts for local dev
+1. ✅ `data/exercises.json` vendored, pinned at commit `5197c05` (873 exercises; sha256 recorded in `src/seed/library.ts`; dir is prettier-ignored to stay byte-identical)
+2. ✅ `seedLibrary()`: upserts `equipments` (12, with coarse `type`: free_weight/machine/accessory/bodyweight/other) + `muscle_groups` (17); zod-validates the vendored file against the source contract (`src/seed/source-schema.ts`) so vocab drift fails loudly
+3. ✅ Upserts `exercises` keyed by `slug` (chunked, `onConflictDoUpdate`); rebuilds `exercise_muscles` wholesale (2,583 rows) so source removals propagate
+4. Sync images to S3 (`exercises/<slug>/<n>.jpg`) — **deferred to Phase 2.5** (no bucket yet); DB already stores relative paths; base URL from env (`IMAGE_BASE_URL`): local dev = static folder or dev bucket, prod = S3 (CloudFront later)
+5. ✅ Nulls in source `force`/`mechanic`/`equipment` stay null — future generator excludes unlabeled exercises from push/pull selection rather than guessing
+6. ✅ Idempotent: `pnpm db:seed` (library + demo) / `db:seed:library` (library only); demo data (demo user + friend, settings/stats/measurements, 1 completed push workout, 1 planned pull workout with share link `demoshare123`) skips itself if present
 
 ---
 
@@ -259,8 +264,8 @@ Create (from library or clone) → `planned` → Start (`in_progress`, `started_
 | Phase | Status | Deliverable                                                                                                                                         |
 | -------| --------| -----------------------------------------------------------------------------------------------------------------------------------------------------|
 | 0     | ✅ done (`9abc71a`) | Scaffold: Turborepo + pnpm, tsconfig/eslint/prettier, docker compose, CI skeleton (lint/typecheck/test on PR)                                       |
-| 1     | next   | `packages/db`: Drizzle schema (§4) + migrations; ingestion/seed pipeline (§6)                                                                       |
-| 2     | —      | Auth: better-auth (email/password + anonymous) wired into Fastify + tRPC context; onboarding (stats/settings)                                       |
+| 1     | ✅ done | `packages/db`: Drizzle schema (§4) + migrations; ingestion/seed pipeline (§6)                                                                       |
+| 2     | next   | Auth: better-auth (email/password + anonymous) wired into Fastify + tRPC context; onboarding (stats/settings)                                       |
 | 2.5   | —      | **Deploy early:** Terraform prod stack + deploy pipeline live with just auth + library browsing — derisks infra assumptions before features pile up |
 | 3     | —      | Workout builder + logging: exercise picker (search/filter), sets/supersets, logging UX, history                                                     |
 | 4     | —      | Progress: volume-over-time, body-weight chart, profile stats                                                                                        |
@@ -274,3 +279,12 @@ Then fast-follow #1 (generation) gets its own planning round.
 - Everything verified end-to-end: 14/14 turbo tasks green; tRPC ping flows web → Vite proxy → api with superjson `Date` round-trip; both Docker images build and the `--profile full` stack came up healthy behind Caddy on :8080
 - Beyond the plan line-item: shadcn/ui initialized (button seeded), Prettier format check added to CI, `AGENTS.md` carries the verification commands + toolchain gotchas (TS 6 `baseUrl` removal, react-hooks v7 flat config, pnpm 10 `onlyBuiltDependencies` / `deploy --legacy`)
 - api Docker image = tsup bundle + `pnpm deploy --legacy --prod` pruned runtime; web Docker image = Caddy serving static build + proxying `/trpc` `/api` `/s/` `/f/` `/health`
+
+### Phase 1 delivery notes (2026-07-06)
+
+- Schema (§4) implemented in `packages/db/src/schema/` (auth / profile / exercises / workouts / social + relations + shared enum types); single migration `0000_abandoned_jackpot.sql`: 15 tables, 10 pg enums, all FKs/indexes/checks
+- better-auth tables pre-created to the v1.6 core shape (+ `is_anonymous`) with UUID pks — Phase 2 wires the drizzle adapter + `generateId: uuidv7` with zero migration
+- `experience_level` enum intentionally shared between user settings and exercise difficulty (same 3-value vocab)
+- Deviations from §4 as originally written, both annotated inline: `position` instead of `order` (reserved word; no UNIQUE so drag-reorder is free), friendship canonical pair via `CHECK (user_id < friend_id)` instead of least/greatest expression index
+- Verified: 7 vitest integration tests against a real Postgres 17 via testcontainers (seed idempotency incl. 873-exercise count, muscle-role mapping spot-check, UUIDv7 format, demo no-op re-run, numeric→number mode, pair-order + unique constraint rejection, user-deletion cascade); `db:migrate` + `db:seed` run clean against compose postgres (sanity SQL: counts + Barbell Squat mapping + demo share link)
+- Gotcha for later phases: drizzle wraps pg errors — constraint names live on `error.cause.constraint`, not the message

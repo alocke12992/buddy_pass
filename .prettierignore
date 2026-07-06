@@ -10,3 +10,6 @@ docs
 plans
 AGENTS.md
 CONTEXT.md
+
+# vendored data — must stay byte-identical to the pinned upstream
+packages/db/data

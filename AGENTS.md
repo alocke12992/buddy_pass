@@ -4,16 +4,20 @@ Root instructions for any agent working in this repo. This file loads on every m
 
 ## Project status
 
-Phase 0 (scaffold) complete at `9abc71a`; **next is Phase 1** (Drizzle schema + free-exercise-db ingestion). The plan of record is `plans/MVP.md` — decisions in §2, schema in §4, per-phase progress in §9. `plans/INIT.md` is the original brain-dump (history, not current design).
+Phases 0–1 complete; **next is Phase 2** (better-auth email/password + anonymous, onboarding). The plan of record is `plans/MVP.md` — decisions in §2, schema in §4, per-phase progress + delivery notes in §9. `plans/INIT.md` is the original brain-dump (history, not current design).
 
-Monorepo: pnpm + Turborepo. `apps/api` (Fastify + tRPC on :3000), `apps/web` (Vite React SPA on :5173, Tailwind v4 + shadcn/ui), `packages/shared` (zod schemas/utils), `packages/db` (Drizzle client factory; schema lands Phase 1).
+Monorepo: pnpm + Turborepo. `apps/api` (Fastify + tRPC on :3000), `apps/web` (Vite React SPA on :5173, Tailwind v4 + shadcn/ui), `packages/shared` (zod schemas/utils), `packages/db` (Drizzle schema in `src/schema/`, migrations, seed pipeline).
 
 ## Daily dev
 
 ```sh
 docker compose up -d    # Postgres 17 only
+pnpm db:migrate         # drizzle migrations
+pnpm db:seed            # exercise library (873) + demo data (idempotent)
 pnpm dev                # api (tsx watch) + web (Vite, proxies /trpc + /api)
 ```
+
+Demo login data: `demo@buddypass.local` user with history + a planned workout shared at token `demoshare123`.
 
 ## Verification (run before considering work done)
 
@@ -40,6 +44,15 @@ docker compose --profile full stop api web
 - pnpm 10: build scripts must be allow-listed in `pnpm-workspace.yaml` `onlyBuiltDependencies`; `pnpm deploy` needs `--legacy` (used in apps/api/Dockerfile)
 - All timestamps `timestamptz` UTC; weights stored in kg; UUIDv7 PKs generated app-side
 - Postgres 17 (RDS parity); docker compose default = postgres only, `--profile full` = whole stack
+
+## Database (`packages/db`)
+
+- Drizzle with `casing: 'snake_case'` (set in BOTH `drizzle.config.ts` and the client) — column builders stay name-less, TS keys are camelCase
+- Schema changes: edit `src/schema/*.ts` → `pnpm db:generate` → review SQL in `migrations/` → `pnpm db:migrate`. Never hand-edit applied migrations
+- auth tables (`user`/`session`/`account`/`verification`) mirror better-auth v1.6 core schema — keep field parity if better-auth is upgraded
+- `packages/db/data/exercises.json` is vendored + commit-pinned (sha256 in `src/seed/library.ts`) and prettier-ignored — must stay byte-identical; re-vendor deliberately, watch for GitHub 429 error pages when curling raw content
+- db tests run against real Postgres via testcontainers (needs Docker); drizzle wraps pg errors — assert on `error.cause.constraint`
+- Exercise ordering uses `position` (not `order`), no unique constraint — app-maintained; friendships require `user_id < friend_id` (canonical pair) — sort UUIDs before insert
 
 ## Design system
 

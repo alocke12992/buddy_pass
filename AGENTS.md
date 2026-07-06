@@ -4,9 +4,35 @@ Root instructions for any agent working in this repo. This file loads on every m
 
 ## Project status
 
-Pre-implementation — no application code exists yet. The product spec is `plans/INIT.md`: **Buddy Pass**, a "multiplayer" workout app (create/share/sync workouts with friends, track and compare progress, AI-generated workouts). Treat that spec as intent to be grilled, not settled design — the architecture and schema in it are proposals.
+Phase 0 (scaffold) complete. The plan of record is `plans/MVP.md` — grilled and refined from the original brain-dump `plans/INIT.md` (treat INIT as history, not current design). Build phases, schema, and all architecture decisions live in the MVP plan.
 
-Until the user directs otherwise, do not scaffold code, choose dependencies, or create framework files. The active working surface is the skills in `.devin/skills/`.
+Monorepo: pnpm + Turborepo. `apps/api` (Fastify + tRPC), `apps/web` (Vite React SPA, Tailwind v4 + shadcn/ui), `packages/shared` (zod schemas/utils), `packages/db` (Drizzle, schema lands in Phase 1).
+
+## Verification (run before considering work done)
+
+```sh
+pnpm turbo lint typecheck test build   # all packages, Turbo-cached
+pnpm format:check                      # CI enforces Prettier (code only; prose dirs ignored)
+```
+
+Prod-parity smoke test (when touching Docker/Caddy/compose):
+
+```sh
+docker compose --profile full up -d --build --wait
+curl -s http://localhost:8080/health          # {"status":"ok"} via Caddy → api
+curl -s http://localhost:8080/trpc/ping       # superjson envelope with Date meta
+docker compose --profile full stop api web
+```
+
+## Scaffold conventions
+
+- Workspace packages are consumed as TypeScript source (`exports` → `./src/*.ts`) — no build step for `packages/*`; `apps/api` bundles them via tsup `noExternal`
+- `apps/web` imports ONLY `import type { AppRouter } from '@buddy-pass/api/router'` from the api — never runtime code
+- TS 6: `baseUrl` is deprecated — use `paths` relative to the tsconfig
+- eslint-plugin-react-hooks v7 flat config lives at `configs.flat.recommended`
+- pnpm 10: build scripts must be allow-listed in `pnpm-workspace.yaml` `onlyBuiltDependencies`; `pnpm deploy` needs `--legacy` (used in apps/api/Dockerfile)
+- All timestamps `timestamptz` UTC; weights stored in kg; UUIDv7 PKs generated app-side
+- Postgres 17 (RDS parity); docker compose default = postgres only, `--profile full` = whole stack
 
 ## Design system
 

@@ -1,0 +1,47 @@
+# Daily dev: `docker compose up -d` starts postgres only; run api/web on the host
+# with `pnpm dev` for fast HMR.
+# Prod-parity check: `docker compose --profile full up --build` runs the real images
+# (Caddy-served SPA proxying to the api container) — the same shape that ships to EC2.
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: buddy
+      POSTGRES_PASSWORD: buddy
+      POSTGRES_DB: buddy_pass
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U buddy -d buddy_pass']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    profiles: [full]
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      DATABASE_URL: postgres://buddy:buddy@postgres:5432/buddy_pass
+      PORT: '3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - '3000:3000'
+
+  web:
+    profiles: [full]
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    depends_on:
+      - api
+    ports:
+      - '8080:80'
+
+volumes:
+  pgdata:

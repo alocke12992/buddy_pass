@@ -1,0 +1,12 @@
+node_modules
+dist
+.turbo
+coverage
+pnpm-lock.yaml
+
+# prose & agent config — not governed by code formatting
+.devin
+docs
+plans
+AGENTS.md
+CONTEXT.md

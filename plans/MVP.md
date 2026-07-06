@@ -217,7 +217,7 @@ Create (from library or clone) → `planned` → Start (`in_progress`, `started_
 ### Local (docker compose)
 - `postgres` (matching RDS major version), `api` (tsx watch), `web` (vite dev) — same Dockerfiles as prod with dev overrides
 - `pnpm db:migrate && pnpm db:seed` for setup; `.env.example` documented
-- Node 24 LTS, pnpm; ESLint + Prettier
+- Node 22 LTS (matches local toolchain; supported to Apr 2027), pnpm; ESLint + Prettier
 
 ### Testing
 - **Vitest** everywhere; Turborepo runs per-package

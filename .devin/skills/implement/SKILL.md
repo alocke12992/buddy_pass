@@ -1,7 +1,8 @@
 ---
 name: implement
 description: "Implement a piece of work based on a PRD or set of issues."
-disable-model-invocation: true
+argument-hint: "[PRD path or issue refs]"
+triggers: [user]
 ---
 
 Implement the work described by the user in the PRD or issues.

@@ -115,7 +115,7 @@ Secrets in GH Actions: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` only; region
 | 0 ✅ | Account prep (manual, one-time): dedicated account, root MFA'd + locked away, Identity Center configured, **domain registered** — values in §0 | `aws sts get-caller-identity --profile buddypass_prod` → `712934828837` ✓ (2026-07-07) |
 | 1 ✅ | `infra/bootstrap/` (state bucket + AWS Budget); `infra/prod/` skeleton on the S3 backend | Bootstrap applied (bucket `buddypass-prod-tfstate-712934828837` + $50/$60 budget); prod `init/plan/apply` clean, state object in S3 ✓ (2026-07-07) |
 | 2 ✅ | ECR repos + CI IAM user | `buddypass-prod/{api,web}` live; arm64 images (`9fd3991`) built + pushed from the laptop authenticated as `buddypass-prod-ci` ✓ (2026-07-07) |
-| 3 | VPC + RDS + S3 | RDS reachable from the EC2 subnet path only; direct internet connection refused; bucket policy spot-check |
+| 3 ✅ | VPC + RDS + S3 | RDS endpoint resolves to a private IP (10.0.x.x), unreachable from the internet; bucket spot-check: `exercises/*` public 200, other paths 403 ✓ (2026-07-07) |
 | 4 | EC2 + instance role + SSM params + Route53 zone/records + health-check alarm + `deploy.sh`; api image migration entrypoint | One manual `deploy.sh` run end-to-end; app (auth + library browsing) serving at `https://<domain>` with valid TLS — the MVP §9 "deploy early" bar |
 | 5 | `deploy.yml` (push-to-main + `workflow_dispatch` sha) | Merge a trivial change to main → new image live with no manual steps; dispatch an older sha → rollback observed |
 | 6 | Follow-ups | S3 image sync for the exercise library (deferred MVP §6.4 item) + `IMAGE_BASE_URL` flip; CI-key-rotation note in AGENTS.md |

@@ -1,6 +1,7 @@
 import { CalendarDays, CircleUser, House, Users } from 'lucide-react';
 import { NavLink, Outlet } from 'react-router';
 import { cn } from '@/lib/utils';
+import { Wordmark } from './Wordmark';
 
 const TABS = [
   { to: '/', label: 'Home', icon: House, end: true },
@@ -8,14 +9,6 @@ const TABS = [
   { to: '/friends', label: 'Friends', icon: Users },
   { to: '/profile', label: 'Profile', icon: CircleUser },
 ] as const;
-
-function Wordmark() {
-  return (
-    <span className="text-lg font-semibold tracking-tight">
-      Buddy<span className="text-primary">Pass</span>
-    </span>
-  );
-}
 
 /**
  * Tabbed shell (FRONTEND.md §2): bottom tab bar <1024px, sidebar ≥1024px,

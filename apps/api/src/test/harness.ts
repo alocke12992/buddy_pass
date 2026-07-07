@@ -76,6 +76,19 @@ export async function signUp(
   return { cookie: cookieFrom(res), userId: res.json().user.id };
 }
 
+export async function signIn(
+  server: FastifyInstance,
+  opts: { email: string; password: string },
+): Promise<Session> {
+  const res = await server.inject({
+    method: 'POST',
+    url: '/api/auth/sign-in/email',
+    payload: { email: opts.email, password: opts.password },
+  });
+  if (res.statusCode >= 400) throw new Error(`sign-in failed (${res.statusCode}): ${res.body}`);
+  return { cookie: cookieFrom(res), userId: res.json().user.id };
+}
+
 export async function signInAnonymous(server: FastifyInstance): Promise<Session> {
   const res = await server.inject({
     method: 'POST',

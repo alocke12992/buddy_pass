@@ -1,8 +1,10 @@
 import { and, asc, eq } from 'drizzle-orm';
 import type { Database } from '../client';
 import {
+  account,
   bodyMeasurements,
   exercises,
+  friendLinks,
   shareLinks,
   user,
   userFriends,
@@ -16,6 +18,14 @@ import {
 const DEMO_EMAIL = 'demo@buddypass.local';
 const BUDDY_EMAIL = 'buddy@buddypass.local';
 const DEMO_SHARE_TOKEN = 'demoshare123';
+const DEMO_FRIEND_TOKEN = 'demofriend123';
+// better-auth scrypt hash of 'demo1234', pre-computed so the seed needs no
+// better-auth dependency. Coupled to better-auth's hash params — regenerate on
+// upgrade with:
+//   cd apps/api && pnpm exec tsx -e \
+//     "import('better-auth/crypto').then(async (m) => console.log(await m.hashPassword('demo1234')))"
+const DEMO_PASSWORD_HASH =
+  '7128ef4fec1d8519009010af835593e3:524512551c890b29e876c96bb2bacd0a565ea87904c4b69dd4ce3b36543a11466032daa92fe1e408d660150b503c31a140b50dd80bfd2072a400a65904af96b8';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const daysAgo = (n: number) => new Date(Date.now() - n * DAY_MS);
@@ -81,10 +91,38 @@ async function insertWorkoutWithSets(
   return workout!.id;
 }
 
-/** Local-dev demo data; skipped entirely if the demo user already exists. */
+/**
+ * Credential account (better-auth shape: providerId 'credential', accountId = user id)
+ * so `demo@buddypass.local` / `demo1234` is a real login, plus the stable
+ * `demofriend123` invite link. Idempotent on its own so it also heals dev
+ * databases seeded before the demo login existed (plans/WEB.md milestone 0).
+ */
+async function ensureDemoLogin(db: Database, demoId: string) {
+  const creds = await db
+    .select({ id: account.id })
+    .from(account)
+    .where(and(eq(account.userId, demoId), eq(account.providerId, 'credential')));
+  if (creds.length === 0) {
+    await db.insert(account).values({
+      userId: demoId,
+      accountId: demoId,
+      providerId: 'credential',
+      password: DEMO_PASSWORD_HASH,
+    });
+  }
+  await db
+    .insert(friendLinks)
+    .values({ userId: demoId, token: DEMO_FRIEND_TOKEN })
+    .onConflictDoNothing();
+}
+
+/** Local-dev demo data; skipped (but login-healed) if the demo user already exists. */
 export async function seedDemo(db: Database) {
   const existing = await db.select({ id: user.id }).from(user).where(eq(user.email, DEMO_EMAIL));
-  if (existing.length > 0) return { created: false };
+  if (existing.length > 0) {
+    await ensureDemoLogin(db, existing[0]!.id);
+    return { created: false };
+  }
 
   const [demo] = await db
     .insert(user)
@@ -96,6 +134,8 @@ export async function seedDemo(db: Database) {
     .returning({ id: user.id });
   const demoId = demo!.id;
   const buddyId = buddy!.id;
+
+  await ensureDemoLogin(db, demoId);
 
   await db.insert(userSettings).values({
     userId: demoId,

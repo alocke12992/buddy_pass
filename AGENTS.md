@@ -26,7 +26,7 @@ pnpm db:seed            # exercise library (873) + demo data (idempotent)
 pnpm dev                # api (tsx watch) + web (Vite, proxies /trpc + /api)
 ```
 
-Demo login data: `demo@buddypass.local` user with history + a planned workout shared at token `demoshare123`.
+Demo login: `demo@buddypass.local` / `demo1234` (real credential account) with history, a planned workout shared at token `demoshare123`, and invite link token `demofriend123`. Seed re-runs heal older dev DBs missing the login.
 
 ## Verification (run before considering work done)
 

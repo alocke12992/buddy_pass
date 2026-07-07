@@ -1,0 +1,111 @@
+# Prod deploy (plans/INFRA.md §4).
+#   - Auto: runs after the CI workflow succeeds on main.
+#   - Manual: workflow_dispatch with an optional sha — the rollback / redeploy /
+#     config-refresh button (SSM param changes only take effect on deploy).
+# Builds are native arm64 (t4g target); deploys go through SSM Run Command —
+# the CI credential can only push to ECR and poke deploy.sh, nothing else.
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Git sha to deploy (defaults to HEAD of main)
+        required: false
+
+# queue, never cancel: racing merges must not interleave SSM commands
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+    env:
+      DEPLOY_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.sha || github.sha }}
+    steps:
+      - name: Resolve image tag (short sha)
+        id: tag
+        run: echo "tag=${DEPLOY_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build + push api
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ vars.ECR_REGISTRY }}/buddypass-prod/api:${{ steps.tag.outputs.tag }}
+            ${{ vars.ECR_REGISTRY }}/buddypass-prod/api:latest
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max
+
+      - name: Build + push web
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ vars.ECR_REGISTRY }}/buddypass-prod/web:${{ steps.tag.outputs.tag }}
+            ${{ vars.ECR_REGISTRY }}/buddypass-prod/web:latest
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max
+
+      - name: Deploy via SSM
+        run: |
+          set -euo pipefail
+          TAG='${{ steps.tag.outputs.tag }}'
+          CMD_ID=$(aws ssm send-command \
+            --instance-ids '${{ vars.EC2_INSTANCE_ID }}' \
+            --document-name AWS-RunShellScript \
+            --comment "deploy $TAG" \
+            --parameters "commands=[\"/opt/buddy-pass/deploy.sh $TAG\"],executionTimeout=[\"600\"]" \
+            --query Command.CommandId --output text)
+          echo "command: $CMD_ID"
+          for i in $(seq 1 60); do
+            STATUS=$(aws ssm get-command-invocation --command-id "$CMD_ID" \
+              --instance-id '${{ vars.EC2_INSTANCE_ID }}' --query Status --output text)
+            echo "[$i] $STATUS"
+            case "$STATUS" in
+              Success) break ;;
+              Failed|Cancelled|TimedOut|Undeliverable)
+                aws ssm get-command-invocation --command-id "$CMD_ID" \
+                  --instance-id '${{ vars.EC2_INSTANCE_ID }}' \
+                  --query '{out:StandardOutputContent,err:StandardErrorContent}' --output text
+                exit 1 ;;
+            esac
+            sleep 10
+          done
+          aws ssm get-command-invocation --command-id "$CMD_ID" \
+            --instance-id '${{ vars.EC2_INSTANCE_ID }}' \
+            --query StandardOutputContent --output text
+
+      - name: Smoke test
+        run: |
+          curl -fsS "https://${{ vars.DOMAIN }}/health"
+          echo
+          echo "live: ${{ steps.tag.outputs.tag }}"

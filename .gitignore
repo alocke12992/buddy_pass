@@ -17,7 +17,7 @@ coverage/
 .vscode/
 .idea/
 
-# terraform
-infra/.terraform/
-infra/*.tfstate*
-infra/*.tfvars
+# terraform (lock files ARE committed; local/bootstrap state is not — see infra/bootstrap/main.tf for re-import)
+infra/**/.terraform/
+infra/**/*.tfstate*
+infra/**/*.tfvars

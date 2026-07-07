@@ -4,7 +4,7 @@ Root instructions for any agent working in this repo. This file loads on every m
 
 ## Project status
 
-Phases 0–2 complete plus the **full tRPC API surface** (API halves of Phases 3–5); **next is Phase 2.5** (deploy) or the web UI. Plans of record: `plans/MVP.md` (decisions §2, schema §4, progress + delivery notes §9) and `plans/API.md` (API contracts, auth tiers, wiring facts). `plans/INIT.md` is the original brain-dump (history, not current design).
+Phases 0–2 complete plus the **full tRPC API surface** (API halves of Phases 3–5); **next is Phase 2.5** (deploy) or the web UI. Plans of record: `plans/MVP.md` (decisions §2, schema §4, progress + delivery notes §9), `plans/API.md` (API contracts, auth tiers, wiring facts), and `plans/INFRA.md` (Phase 2.5 infra/deploy — grilled 2026-07-07; milestone 0 done). `plans/INIT.md` is the original brain-dump (history, not current design).
 
 Monorepo: pnpm + Turborepo. `apps/api` (Fastify + tRPC on :3000), `apps/web` (Vite React SPA on :5173, Tailwind v4 + shadcn/ui), `packages/shared` (zod schemas/utils), `packages/db` (Drizzle schema in `src/schema/`, migrations, seed pipeline).
 
@@ -62,6 +62,16 @@ docker compose --profile full stop api web
 - `packages/db/data/exercises.json` is vendored + commit-pinned (sha256 in `src/seed/library.ts`) and prettier-ignored — must stay byte-identical; re-vendor deliberately, watch for GitHub 429 error pages when curling raw content
 - db tests run against real Postgres via testcontainers (needs Docker); drizzle wraps pg errors — assert on `error.cause.constraint`
 - Exercise ordering uses `position` (not `order`), no unique constraint — app-maintained; friendships require `user_id < friend_id` (canonical pair) — sort UUIDs before insert
+
+## Infrastructure (`infra/`) — Phase 2.5
+
+Plan of record: `plans/INFRA.md` (read it before any infra work). Fixed facts:
+
+- **AWS**: dedicated account `712934828837` ("buddypass_prod", under an Organization), region **us-west-2**. Human access via IAM Identity Center SSO — local profile **`buddypass_prod`** (`aws sso login --profile buddypass_prod`; never long-lived admin keys, never root)
+- **Domain**: `buddy-pass.com`, registered in Route53 in that account (hosted zone auto-created). Domain flows from a single `domain_name` TF variable
+- **Alerts** (Budget + health-check SNS): `alocke12992+buddypass@gmail.com`
+- Terraform ≥ 1.10 (native S3 state locking; installed via `hashicorp/tap`). Applies are **laptop-only** via the SSO profile; CI only pushes images to ECR + triggers `deploy.sh` over SSM. Pin `allowed_account_ids = ["712934828837"]` in every stack
+- t4g instances are **arm64** — Docker images must be built for `linux/arm64`
 
 ## Design system
 

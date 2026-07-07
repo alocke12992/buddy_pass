@@ -282,7 +282,7 @@ Then fast-follow #1 (generation) gets its own planning round.
 
 ### Phase 1 delivery notes (2026-07-06)
 
-- Schema (§4) implemented in `packages/db/src/schema/` (auth / profile / exercises / workouts / social + relations + shared enum types); single migration `0000_abandoned_jackpot.sql`: 15 tables, 10 pg enums, all FKs/indexes/checks
+- Schema (§4) implemented in `packages/db/src/schema/` (auth / profile / exercises / workouts / social + relations + shared enum types); single migration `0000_abandoned_jackpot.sql`: 17 tables, 10 pg enums, all FKs/indexes/checks
 - better-auth tables pre-created to the v1.6 core shape (+ `is_anonymous`) with UUID pks — Phase 2 wires the drizzle adapter + `generateId: uuidv7` with zero migration
 - `experience_level` enum intentionally shared between user settings and exercise difficulty (same 3-value vocab)
 - Deviations from §4 as originally written, both annotated inline: `position` instead of `order` (reserved word; no UNIQUE so drag-reorder is free), friendship canonical pair via `CHECK (user_id < friend_id)` instead of least/greatest expression index

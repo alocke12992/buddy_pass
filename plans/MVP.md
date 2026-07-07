@@ -29,6 +29,7 @@
 - AI generation via AWS Bedrock (behind the same interface as rule-based generation)
 - "How was it" RPE calibration (0/1/2/3/4+/5+ reps left on last set)
 - Your Gym (equipment filtering), comments/likes on workouts, granular privacy, directed `workout_invites`, `workout_analytics` (heart rate, calories), React Native app
+- Deferred during web planning (2026-07-07, `plans/WEB.md`), revisit post-MVP: **friends activity feed** (Friends tab ships invites + friend-profile browsing; a cross-friend feed wants a `friends.feed` endpoint) · **weekly workout goal + streak** (`user_settings.weekly_workout_goal`, Log-tab goal ring — the FRONTEND.md §1 delta) · **account deletion** (better-auth `deleteUser` not enabled)
 
 ---
 

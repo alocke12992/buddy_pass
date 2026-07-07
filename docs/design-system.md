@@ -77,7 +77,7 @@ Volt is excluded — it always means *you*.
 
 ## Typography
 
-- **Family:** Inter (variable) for everything. No second display font for v1.
+- **Family:** Geist (variable) for everything — Phase 0 installed it and it stays (confirmed 2026-07-07 during web planning; supersedes the original Inter pick). No second display font for v1.
 - **Numerals:** `font-variant-numeric: tabular-nums` on ALL numeric data — weights, reps, timers, stats. Non-negotiable; prevents timer jitter and misaligned tables.
 - **Hierarchy is weight + color, not just size.** Labels: 12–14px muted; values: large, bright, semibold+.
 

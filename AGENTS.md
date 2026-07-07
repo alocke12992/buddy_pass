@@ -79,7 +79,7 @@ The visual design language is settled and lives in `docs/design-system.md` — r
 
 - **Dark-first, energetic.** Volt (`#C8F542`) always means *you* (actions, progress, success); violet (`#A78BFA`) always means *buddies* (presence, sync, invites). Never mix them; volt doubles as the success color.
 - **Tokens only.** Feature code consumes semantic CSS variables / shadcn tokens, never raw hexes. Status enums map to fixed colors per the doc's status table.
-- **Glanceable numbers.** `tabular-nums` on all numeric data; Inter only; Lucide icons only; 56px touch targets for mid-workout controls.
+- **Glanceable numbers.** `tabular-nums` on all numeric data; Geist only; Lucide icons only; 56px touch targets for mid-workout controls.
 
 ## Skills
 

@@ -21,6 +21,8 @@ FROM node:22-alpine AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=build /out .
+# drizzle migrations ride along so dist/migrate.js can apply them (INFRA.md §3)
+COPY --from=build /repo/packages/db/migrations ./migrations
 EXPOSE 3000
 USER node
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s \

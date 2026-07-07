@@ -1,0 +1,30 @@
+# Rendered by Terraform user_data onto the box at /opt/buddy-pass/ (INFRA.md §3).
+# No postgres service — the database is RDS. Image tags come from .env (IMAGE_TAG),
+# which deploy.sh renders from SSM + its <image-tag> argument.
+services:
+  api:
+    image: ${ecr_registry}/${name_prefix}/api:$${IMAGE_TAG}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_EXTRA_CA_CERTS: /rds-ca.pem # verify RDS TLS (DATABASE_URL sslmode=require)
+    volumes:
+      - ./rds-ca.pem:/rds-ca.pem:ro
+    ports:
+      - '127.0.0.1:3000:3000' # host-local only, for deploy.sh health checks
+
+  web:
+    image: ${ecr_registry}/${name_prefix}/web:$${IMAGE_TAG}
+    restart: unless-stopped
+    environment:
+      SITE_ADDRESS: $${SITE_ADDRESS}
+    depends_on:
+      - api
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - caddy_data:/data # ACME certs survive container replacement
+
+volumes:
+  caddy_data:

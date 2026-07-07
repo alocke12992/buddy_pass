@@ -35,3 +35,19 @@ provider "aws" {
     }
   }
 }
+
+# Route53 health-check metrics/alarms only exist in us-east-1 (see dns.tf)
+provider "aws" {
+  alias               = "use1"
+  region              = "us-east-1"
+  profile             = var.aws_profile
+  allowed_account_ids = [var.account_id]
+
+  default_tags {
+    tags = {
+      Project   = "buddy-pass"
+      ManagedBy = "terraform"
+      Stack     = "prod"
+    }
+  }
+}

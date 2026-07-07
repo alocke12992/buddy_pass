@@ -25,7 +25,12 @@ const buttonVariants = cva(
         xs: "h-6 gap-1 rounded-[min(var(--radius-md),10px)] px-2 text-xs in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
         sm: "h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
         lg: 'h-9 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2',
+        // Buddy Pass touch targets (design-system.md): 44px general minimum, 56px mid-workout
+        xl: "h-11 gap-2 px-4 text-base [&_svg:not([class*='size-'])]:size-5",
+        workout: "h-14 gap-2 px-5 text-lg font-semibold [&_svg:not([class*='size-'])]:size-7",
         icon: 'size-8',
+        'icon-xl': "size-11 [&_svg:not([class*='size-'])]:size-5",
+        'icon-workout': "size-14 [&_svg:not([class*='size-'])]:size-7",
         'icon-xs':
           "size-6 rounded-[min(var(--radius-md),10px)] in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3",
         'icon-sm':

@@ -4,7 +4,7 @@ Root instructions for any agent working in this repo. This file loads on every m
 
 ## Project status
 
-Phases 0–2 complete plus the **full tRPC API surface** (API halves of Phases 3–5); **next is Phase 2.5** (deploy) or the web UI. Plans of record: `plans/MVP.md` (decisions §2, schema §4, progress + delivery notes §9), `plans/API.md` (API contracts, auth tiers, wiring facts), and `plans/INFRA.md` (Phase 2.5 infra/deploy — grilled 2026-07-07; milestone 0 done). `plans/INIT.md` is the original brain-dump (history, not current design).
+Phases 0–2 complete plus the **full tRPC API surface** (API halves of Phases 3–5). **Phase 2.5 is deployed: prod is live at https://buddy-pass.com** (milestones 0–5 done; only §5 milestone-6 follow-ups remain) — next is the web UI. Plans of record: `plans/MVP.md` (decisions §2, schema §4, progress + delivery notes §9), `plans/API.md` (API contracts, auth tiers, wiring facts), and `plans/INFRA.md` (infra/deploy — grilled 2026-07-07). `plans/INIT.md` is the original brain-dump (history, not current design).
 
 Monorepo: pnpm + Turborepo. `apps/api` (Fastify + tRPC on :3000), `apps/web` (Vite React SPA on :5173, Tailwind v4 + shadcn/ui), `packages/shared` (zod schemas/utils), `packages/db` (Drizzle schema in `src/schema/`, migrations, seed pipeline).
 
@@ -72,6 +72,9 @@ Plan of record: `plans/INFRA.md` (read it before any infra work). Fixed facts:
 - **Alerts** (Budget + health-check SNS): `alocke12992+buddypass@gmail.com`
 - Terraform ≥ 1.10 (native S3 state locking; installed via `hashicorp/tap`). Applies are **laptop-only** via the SSO profile; CI only pushes images to ECR + triggers `deploy.sh` over SSM. Pin `allowed_account_ids = ["712934828837"]` in every stack
 - t4g instances are **arm64** — Docker images must be built for `linux/arm64`
+- **Deploys**: merge to main → CI → `Deploy` workflow (build → ECR → SSM `deploy.sh` → smoke test). Rollback / redeploy / SSM-param refresh = Actions → Deploy → Run workflow with a sha. Manual fallback: build+push locally, then `aws ssm send-command ... "/opt/buddy-pass/deploy.sh <tag>"`. Migrations run on the box, roll-forward only
+- The EC2 box is **cattle** (nothing stateful on it); user_data changes replace it — `EC2_INSTANCE_ID` GH variable must be updated after replacement
+- The CI user's access key (GH secrets) is the only standing credential — rotate periodically: `aws iam create-access-key`, update GH secrets, delete old key
 
 ## Design system
 

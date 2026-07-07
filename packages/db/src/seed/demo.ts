@@ -34,6 +34,7 @@ async function insertWorkoutWithSets(
   db: Database,
   ownerId: string,
   opts: {
+    name: string;
     exerciseIds: string[];
     status: 'planned' | 'completed';
     startedAt?: Date;
@@ -46,6 +47,7 @@ async function insertWorkoutWithSets(
     .insert(workouts)
     .values({
       ownerId,
+      name: opts.name,
       status: opts.status,
       visibility: 'friends',
       startedAt: opts.startedAt,
@@ -123,6 +125,7 @@ export async function seedDemo(db: Database) {
   const pullExercises = await pickExercises(db, 'pull', 3);
 
   await insertWorkoutWithSets(db, demoId, {
+    name: 'Push Day',
     exerciseIds: pushExercises.map((e) => e.id),
     status: 'completed',
     startedAt: new Date(daysAgo(1).getTime() - 60 * 60 * 1000),
@@ -132,6 +135,7 @@ export async function seedDemo(db: Database) {
   });
 
   const plannedId = await insertWorkoutWithSets(db, demoId, {
+    name: 'Pull Day',
     exerciseIds: pullExercises.map((e) => e.id),
     status: 'planned',
     baseWeightKg: 50,

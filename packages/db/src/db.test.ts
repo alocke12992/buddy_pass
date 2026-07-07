@@ -89,6 +89,7 @@ describe('demo seed', () => {
       with: { exercises: { with: { sets: true, exercise: true } } },
     });
     expect(demoWorkouts).toHaveLength(2);
+    expect(demoWorkouts.map((w) => w.name).sort()).toEqual(['Pull Day', 'Push Day']);
     for (const w of demoWorkouts) {
       expect(w.exercises).toHaveLength(3);
       expect(w.exercises.flatMap((e) => e.sets)).toHaveLength(9);
@@ -141,7 +142,10 @@ describe('constraints', () => {
       .values({ name: 'Doomed', email: 'doomed@test.local' })
       .returning({ id: user.id });
     const [ex] = await db.select({ id: exercises.id }).from(exercises).limit(1);
-    const [w] = await db.insert(workouts).values({ ownerId: u!.id }).returning({ id: workouts.id });
+    const [w] = await db
+      .insert(workouts)
+      .values({ ownerId: u!.id, name: 'Doomed Workout' })
+      .returning({ id: workouts.id });
     const [we] = await db
       .insert(workoutExercises)
       .values({ workoutId: w!.id, exerciseId: ex!.id, position: 0 })

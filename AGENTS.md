@@ -4,9 +4,18 @@ Root instructions for any agent working in this repo. This file loads on every m
 
 ## Project status
 
-Phases 0–1 complete; **next is Phase 2** (better-auth email/password + anonymous, onboarding). The plan of record is `plans/MVP.md` — decisions in §2, schema in §4, per-phase progress + delivery notes in §9. `plans/INIT.md` is the original brain-dump (history, not current design).
+Phases 0–2 complete plus the **full tRPC API surface** (API halves of Phases 3–5); **next is Phase 2.5** (deploy) or the web UI. Plans of record: `plans/MVP.md` (decisions §2, schema §4, progress + delivery notes §9) and `plans/API.md` (API contracts, auth tiers, wiring facts). `plans/INIT.md` is the original brain-dump (history, not current design).
 
 Monorepo: pnpm + Turborepo. `apps/api` (Fastify + tRPC on :3000), `apps/web` (Vite React SPA on :5173, Tailwind v4 + shadcn/ui), `packages/shared` (zod schemas/utils), `packages/db` (Drizzle schema in `src/schema/`, migrations, seed pipeline).
+
+## API (`apps/api`)
+
+- Three procedure tiers (ADR-0001): `public` / `authed` (guests incl.) / `registered` — builders in `src/trpc/trpc.ts`; business logic lives in `src/services/`, routers stay thin
+- better-auth 1.6 at `/api/auth/*` (email/password + anonymous; `onLinkAccount` merges guest data via `services/merge.ts`); session resolved once per request into tRPC context
+- Import drizzle operators (`eq`, `and`, `sql`, ...) from `@buddy-pass/db`, never from `drizzle-orm` directly — a second peer-resolved drizzle instance breaks type identity in the api
+- `buildServer({ databaseUrl, ... })` is injectable; api integration tests boot it against a testcontainer and drive everything through `server.inject` (helpers in `src/test/harness.ts`)
+- tRPC mutations need `content-type: application/json` even with empty bodies; raw SQL fragments need explicit `mapWith` (drizzle decoders don't run on them)
+- Env: `BETTER_AUTH_SECRET` required in real deployments; `APP_ORIGIN` = public web origin used for minted `/s/` `/f/` URLs (see `.env.example`)
 
 ## Daily dev
 

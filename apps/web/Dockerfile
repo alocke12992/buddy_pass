@@ -7,9 +7,12 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json turbo.json tsconfig.base.js
 COPY apps/web/package.json apps/web/
 COPY apps/api/package.json apps/api/
 COPY packages/shared/package.json packages/shared/
+# db is needed because web type-checks the api source it imports AppRouter from
+COPY packages/db/package.json packages/db/
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile --filter "@buddy-pass/web..."
 COPY packages/shared packages/shared
+COPY packages/db packages/db
 COPY apps/api apps/api
 COPY apps/web apps/web
 RUN pnpm --filter @buddy-pass/web build

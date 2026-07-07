@@ -1,7 +1,3 @@
-import { publicProcedure, router } from './trpc';
-
-export const appRouter = router({
-  ping: publicProcedure.query(() => ({ pong: true, at: new Date() })),
-});
-
-export type AppRouter = typeof appRouter;
+// Public type boundary: apps/web imports ONLY `import type { AppRouter }` from
+// this module (package export "./router") — never runtime code.
+export { appRouter, type AppRouter } from './trpc/router';

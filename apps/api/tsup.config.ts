@@ -8,4 +8,7 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   noExternal: [/^@buddy-pass\//],
+  // pg is CJS with dynamic requires — bundling it into ESM breaks ("Dynamic require
+  // of 'events'"). It reaches the runtime via @buddy-pass/db in pnpm deploy's output.
+  external: ['pg'],
 });

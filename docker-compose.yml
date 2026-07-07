@@ -27,6 +27,11 @@ services:
     environment:
       DATABASE_URL: postgres://buddy:buddy@postgres:5432/buddy_pass
       PORT: '3000'
+      # local prod-parity only — real deployments inject a strong secret
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-compose-local-secret-0123456789abcdef}
+      # the browser reaches this stack through Caddy on :8080
+      BETTER_AUTH_URL: http://localhost:8080
+      APP_ORIGIN: http://localhost:8080
     depends_on:
       postgres:
         condition: service_healthy

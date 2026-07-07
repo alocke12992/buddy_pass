@@ -21,6 +21,8 @@ export const workouts = pgTable(
     ownerId: uuid()
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
+    /** Workout title — required by the share OG page, clone flow, and history lists (plans/API.md §1). */
+    name: text().notNull(),
     status: workoutStatus().notNull().default('planned'),
     visibility: workoutVisibility().notNull().default('private'),
     scheduledFor: timestamp({ withTimezone: true }),

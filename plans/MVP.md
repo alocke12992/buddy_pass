@@ -2,7 +2,7 @@
 
 > Refined from `INIT.md` via grilling session on 2026-07-06. INIT.md remains the original brain-dump; this is the source of truth for the MVP build.
 >
-> **Status:** Phases 0–1 complete (scaffold; schema + ingestion) — see §9 for per-phase progress. Next: Phase 2 (auth + onboarding).
+> **Status:** Phases 0–1 complete (scaffold; schema + ingestion), plus the **full API surface** (plans/API.md — auth, onboarding, workouts, logging, friends, sharing, stats) built and integration-tested. See §9. Next: Phase 2.5 (deploy) or Phase 3 UI (builder + logging screens; their API is ready).
 
 **Vision:** "Multiplayer" workouts — create and share workouts with friends, track and compare progress, eventually work out together in real time. The share/clone loop is the growth engine: anyone can receive a workout link and start using it *without signing up*.
 
@@ -240,6 +240,7 @@ Create (from library or clone) → `planned` → Start (`in_progress`, `started_
 - **PR + main:** ✅ format check + turbo lint/typecheck/test/build (`.github/workflows/ci.yml`)
 - **Merge to main (deploy — Phase 2.5):** build images → push ECR → run drizzle migrations against RDS → SSM/SSH to EC2 → `compose pull && compose up -d`
 - Secrets in GH Actions secrets + `.env` on the box (SSM Parameter Store when it grows)
+- Refined in `plans/INFRA.md` (2026-07-07): SSM Run Command (not SSH), migrations run on the box (not from Actions), SSM Parameter Store from day one
 
 ### Production (Terraform in `infra/`)
 - **EC2** t4g.small: runs `caddy` (TLS + static `web` build + reverse proxy `/trpc`, `/api`, `/s/`, `/f/` → api container) + `api` container via compose
@@ -265,12 +266,12 @@ Create (from library or clone) → `planned` → Start (`in_progress`, `started_
 | -------| --------| -----------------------------------------------------------------------------------------------------------------------------------------------------|
 | 0     | ✅ done (`9abc71a`) | Scaffold: Turborepo + pnpm, tsconfig/eslint/prettier, docker compose, CI skeleton (lint/typecheck/test on PR)                                       |
 | 1     | ✅ done | `packages/db`: Drizzle schema (§4) + migrations; ingestion/seed pipeline (§6)                                                                       |
-| 2     | next   | Auth: better-auth (email/password + anonymous) wired into Fastify + tRPC context; onboarding (stats/settings)                                       |
-| 2.5   | —      | **Deploy early:** Terraform prod stack + deploy pipeline live with just auth + library browsing — derisks infra assumptions before features pile up |
-| 3     | —      | Workout builder + logging: exercise picker (search/filter), sets/supersets, logging UX, history                                                     |
-| 4     | —      | Progress: volume-over-time, body-weight chart, profile stats                                                                                        |
-| 5     | —      | Social: friend links, friends list, visibility enforcement, share links + OG page, guest clone, merge-on-signup, link revocation                    |
-| 6     | —      | Polish: empty states, error handling, responsive pass, rate limiting, guest-cleanup job                                                             |
+| 2     | ✅ done | Auth: better-auth (email/password + anonymous) wired into Fastify + tRPC context; onboarding (stats/settings) — shipped as part of the API build (see notes below) |
+| 2.5   | —      | **Deploy early:** Terraform prod stack + deploy pipeline live with just auth + library browsing — derisks infra assumptions before features pile up. Plan of record: `plans/INFRA.md` |
+| 3     | API ✅ | Workout builder + logging: exercise picker (search/filter), sets/supersets, logging UX, history — **UI remains**; tRPC surface + tests shipped      |
+| 4     | API ✅ | Progress: volume-over-time, body-weight chart, profile stats — **UI remains**; tRPC surface + tests shipped                                         |
+| 5     | API ✅ | Social: friend links, friends list, visibility enforcement, share links + OG page, guest clone, merge-on-signup, link revocation — **UI remains**   |
+| 6     | —      | Polish: empty states, error handling, responsive pass, rate limiting (✅ done in API), guest-cleanup job                                            |
 
 Then fast-follow #1 (generation) gets its own planning round.
 
@@ -288,3 +289,16 @@ Then fast-follow #1 (generation) gets its own planning round.
 - Deviations from §4 as originally written, both annotated inline: `position` instead of `order` (reserved word; no UNIQUE so drag-reorder is free), friendship canonical pair via `CHECK (user_id < friend_id)` instead of least/greatest expression index
 - Verified: 7 vitest integration tests against a real Postgres 17 via testcontainers (seed idempotency incl. 873-exercise count, muscle-role mapping spot-check, UUIDv7 format, demo no-op re-run, numeric→number mode, pair-order + unique constraint rejection, user-deletion cascade); `db:migrate` + `db:seed` run clean against compose postgres (sanity SQL: counts + Barbell Squat mapping + demo share link)
 - Gotcha for later phases: drizzle wraps pg errors — constraint names live on `error.cause.constraint`, not the message
+
+### API delivery notes (2026-07-07)
+
+Plan of record: `plans/API.md` (§3 has the wiring facts). Everything in that plan is implemented and tested — Phase 2 in full, plus the API halves of Phases 3–5.
+
+- Migration `0001_thin_lester.sql` applied the flagged schema delta (`workouts.name NOT NULL`, backfill-safe); demo seed now names its workouts ('Push Day' / 'Pull Day')
+- `apps/api` structure per API.md §3: `auth.ts` (better-auth 1.6.23 factory), `trpc/` (context, tiers, 7 routers), `services/` (access, workouts, clone, sharing, stats, merge), `http/routes.ts` (`/s/:token` OG page, `/f/:token` redirect)
+- better-auth wired with drizzle adapter on the Phase 1 tables (zero migration, as designed), `generateId: uuidv7`, anonymous plugin with `onLinkAccount` → transactional guest-data merge (`services/merge.ts`); its Fastify catch-all uses a scoped raw-string JSON parser so empty auth POSTs survive
+- `buildServer({ databaseUrl, ... })` is fully injectable — integration tests boot the real server against a testcontainer and drive it through HTTP (`server.inject`): real cookies, real superjson, no hand-built contexts
+- 45 vitest tests across 4 files pin down all five API.md §4 targets: clone semantics (use_count, revocation, visibility reset, completed_at never copied), visibility (friend/stranger/unknown), guest→registered merge (incl. friendship pair-order rewrite + guest row deletion), the logging state machine, idempotency (createLink/acceptLink/sharing.create), plus stats privacy math, OG pages, and rate limiting
+- Env additions: `BETTER_AUTH_SECRET` (+ `BETTER_AUTH_URL`, `APP_ORIGIN` optional) — see `.env.example`; compose `--profile full` passes prod-shaped values; api dev script now loads root `.env` via `--env-file-if-exists`
+- Gotchas recorded for later phases: consume drizzle operators via `@buddy-pass/db` re-exports (a second peer-resolved drizzle-orm instance breaks type identity); raw SQL fragments bypass drizzle's decoders (map `date_trunc` etc. with `mapWith`); tRPC mutations require `content-type: application/json` even with empty bodies (415 otherwise)
+- Prod-parity smoke test surfaced two packaging fixes: `pg` is CJS and cannot be bundled into the ESM api build (tsup `external: ['pg']` + direct api dependency so `pnpm deploy` links it); the web image must copy `packages/db` since web's `tsc -b` follows `AppRouter` types into api source. Full `--profile full` stack verified through Caddy on :8080 (health, ping, OG share page, anonymous session → `profile.get`)

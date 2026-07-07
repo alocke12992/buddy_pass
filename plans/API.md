@@ -12,11 +12,11 @@ Related ADRs: [0001 guest capability tiers](../docs/adr/0001-guest-capability-ti
 
 Three procedure builders, each a superset of the last (see ADR-0001):
 
-| Tier | Session required | Who | Used for |
-|---|---|---|---|
-| `public` | none | anyone | `sharing.resolve` (backs `/s/:token`) |
-| `authed` | any (incl. **anonymous**) | guests + registered | clone, build, log, profile, accept friend links |
-| `registered` | non-anonymous | registered only | minting share links & friend links |
+| Tier         | Session required          | Who                 | Used for                                        |
+| --------------| ---------------------------| ---------------------| -------------------------------------------------|
+| `public`     | none                      | anyone              | `sharing.resolve` (backs `/s/:token`)           |
+| `authed`     | any (incl. **anonymous**) | guests + registered | clone, build, log, profile, accept friend links |
+| `registered` | non-anonymous             | registered only     | minting share links & friend links              |
 
 `ctx` carries `{ session, user }`; `authed`/`registered` narrow the types.
 
@@ -47,11 +47,11 @@ Shaped for React Query `useInfiniteQuery`. Fixed vocab lists (exercises, equipme
 - Dates cross the wire as `Date` via superjson; all UTC
 - All ids UUIDv7, generated app-side
 - Every input/output schema lives in `packages/shared` (Zod), imported by both router and client
-- Rate limiting (`@fastify/rate-limit`): `sharing.resolve`, `friends.acceptLink`, and better-auth endpoints
+- Rate limiting, three mechanisms matched to transport (tRPC batching means URL-based fastify limits can't target individual procedures): better-auth's built-in limiter for `/api/auth/*`; a small fixed-window per-IP tRPC middleware on the token-guessing surfaces (`sharing.resolve`, `friends.acceptLink`); `@fastify/rate-limit` (`global: false`) on the plain HTTP routes `GET /s/:token`, `GET /f/:token`
 
 ### Schema delta required (flagged during API planning)
 
-- **`workouts.name text NOT NULL`** — MVP.md §4 omits it, but the share OG page ("workout name, exercise count"), the clone flow, history lists, and the builder all require a workout title. Add to the Drizzle schema in Phase 1.
+- **`workouts.name text NOT NULL`** — MVP.md §4 omits it, but the share OG page ("workout name, exercise count"), the clone flow, history lists, and the builder all require a workout title. *Phase 1 shipped without it* — applied at the start of API implementation as migration `0001` (`ADD COLUMN ... DEFAULT 'Workout' NOT NULL` + drop default, so existing dev rows backfill; demo seed sets real names).
 
 ---
 
@@ -117,10 +117,12 @@ WorkoutInput = {
   name: string, notes?: string, scheduledFor?: Date,
   visibility?: 'private' | 'friends',   // omitted → server fills from user_settings
   exercises: Array<{
-    exerciseId: string, order: number, superSetId?: string,  // client-generated uuid grouping
-    sets: Array<{ order: number, isWarmup: boolean, reps: number, weightKg: number, restSeconds: number }>,
+    exerciseId: string, position: number, superSetId?: string,  // client-generated uuid grouping
+    sets: Array<{ position: number, isWarmup: boolean, reps: number, weightKg: number, restSeconds: number }>,
   }>,
 }
+// `position` (not `order`) end-to-end — matches the DB columns (AGENTS.md: reserved-word avoidance),
+// so there is no field rename at the API boundary.
 
 WorkoutSummary = {
   id, name, status, visibility, scheduledFor, startedAt, endedAt,
@@ -131,9 +133,9 @@ WorkoutSummary = {
 WorkoutDoc = WorkoutSummary & {
   notes: string | null,
   exercises: Array<{
-    id, order, superSetId: string | null,
+    id, position, superSetId: string | null,
     exercise: ExerciseIndexEntry,        // embedded, no second fetch for the logging screen
-    sets: Array<{ id, order, isWarmup, reps, weightKg, restSeconds, completedAt: Date | null }>,
+    sets: Array<{ id, position, isWarmup, reps, weightKg, restSeconds, completedAt: Date | null }>,
   }>,
 }
 ```
@@ -217,13 +219,26 @@ Aggregation happens in SQL; procedures return series ready to plot. `userId` omi
 
 ---
 
-## 3. Router file layout (`apps/api`)
+## 3. Auth wiring + file layout (`apps/api`)
+
+### better-auth (v1.6.x) facts pinned during implementation planning
+
+- Instance: `betterAuth({ database: drizzleAdapter(db, { provider: 'pg', schema: { user, session, account, verification } }), emailAndPassword: { enabled: true }, plugins: [anonymous({ onLinkAccount })], advanced: { database: { generateId: () => uuidv7() } } })`. Our Phase 1 tables match the v1.6 core shape (camelCase TS keys on the Drizzle objects are what the adapter reads; `casing: 'snake_case'` maps columns)
+- Mounted on Fastify as a catch-all `/api/auth/*` route: convert Fastify req → Fetch `Request`, call `auth.handler(req)`, copy status/headers/body back (`fromNodeHeaders` from `better-auth/node`)
+- Guest sessions: `POST /api/auth/sign-in/anonymous`; sign-up: `POST /api/auth/sign-up/email`; sign-in: `POST /api/auth/sign-in/email`. Email verification off for MVP
+- **Merge on signup**: `anonymous({ onLinkAccount })` fires when a signed-in guest signs up; hook reassigns guest rows (`workouts`, `user_settings`, `user_stats`, `body_measurements`, `user_friends` — pair-order aware, dedupe vs. existing friendships, `share_links.created_by`, `friend_links`) to the new user id in one transaction; better-auth then deletes the guest row (default behavior)
+- Session resolution in tRPC context: `auth.api.getSession({ headers: fromNodeHeaders(req.headers) })` → `{ session, user }` (user carries `isAnonymous`)
+- Config via env: `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` (api origin), `APP_ORIGIN` (public web origin — trusted origin for CSRF + base for minted `/s/` `/f/` URLs)
+- `buildServer({ databaseUrl })` constructs db + auth + routers per instance (dependency injection → integration tests point the whole server at a testcontainer)
+
+### File layout
 
 ```
 src/
+├── auth.ts               # better-auth instance factory (+ onLinkAccount merge)
 ├── trpc/
-│   ├── context.ts        # session resolution (better-auth) → ctx
-│   ├── middleware.ts     # public / authed / registered builders
+│   ├── context.ts        # session resolution (better-auth) → ctx { db, auth, session, user }
+│   ├── trpc.ts           # initTRPC + public / authed / registered builders + rate-limit middleware
 │   ├── routers/
 │   │   ├── exercises.ts
 │   │   ├── workouts.ts
@@ -232,7 +247,7 @@ src/
 │   │   ├── friends.ts
 │   │   ├── sharing.ts
 │   │   └── stats.ts
-│   └── router.ts         # appRouter = mergeRouters(...)
+│   └── router.ts         # appRouter = router({ exercises, workouts, ... })
 ├── services/             # access checks + clone/merge/aggregation logic,
 │                         #   shared by tRPC routers and plain HTTP routes
 └── http/                 # GET /s/:token (OG page), GET /f/:token, /health
@@ -251,3 +266,7 @@ The API behaviors integration tests must pin down:
 3. Guest → registered merge: guest's workouts/settings/stats/weigh-ins/friendships survive signup (better-auth `onLinkAccount`)
 4. State machine: every illegal `logging` transition → `BAD_REQUEST`; `workouts.update` rejected once started
 5. Idempotency: `acceptLink` twice, `sharing.create` twice, duplicate friendship race → no duplicates
+
+### Bootstrapping strategy
+
+One testcontainer Postgres per test file (migrate + `seedLibrary` in `beforeAll`), `buildServer({ databaseUrl })` pointed at it. Sessions are minted through the real better-auth HTTP surface (`server.inject` → `/api/auth/sign-up/email` or `/sign-in/anonymous`), capturing the session cookie; tRPC procedures are then exercised through `server.inject` against `/trpc/*` with that cookie — the full stack (session resolution, middleware tiers, superjson) is under test, not a hand-built context. A tiny `trpcCall(server, cookie, proc, input)` helper keeps tests readable.

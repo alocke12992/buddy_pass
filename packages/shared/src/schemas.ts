@@ -11,3 +11,6 @@ export type WorkoutVisibility = z.infer<typeof workoutVisibilitySchema>;
 
 export const workoutStatusSchema = z.enum(['planned', 'in_progress', 'completed', 'cancelled']);
 export type WorkoutStatus = z.infer<typeof workoutStatusSchema>;
+
+export const genderSchema = z.enum(['male', 'female', 'other']);
+export type Gender = z.infer<typeof genderSchema>;

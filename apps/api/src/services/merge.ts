@@ -55,7 +55,8 @@ export async function mergeGuestData(db: Database, guestId: string, targetId: st
       const [lo, hi] = [other, targetId].sort() as [string, string];
       await tx
         .insert(userFriends)
-        .values({ userId: lo, friendId: hi, status: row.status })
+        // createdAt carried over so friendsSince survives the merge
+        .values({ userId: lo, friendId: hi, status: row.status, createdAt: row.createdAt })
         .onConflictDoNothing();
     }
   });

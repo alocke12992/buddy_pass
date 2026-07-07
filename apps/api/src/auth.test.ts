@@ -127,6 +127,13 @@ describe('guest → registered merge (better-auth onLinkAccount)', () => {
       guest.cookie,
     );
     expect(accepted.status).toBe(200);
+    const guestFriends = await trpcQuery<{ id: string; friendsSince: Date }[]>(
+      app.server,
+      'friends.list',
+      undefined,
+      guest.cookie,
+    );
+    const friendsSinceAsGuest = guestFriends.data[0]!.friendsSince;
 
     // Sign up with the guest's session cookie → onLinkAccount merge fires
     const upgraded = await signUp(app.server, {
@@ -151,13 +158,14 @@ describe('guest → registered merge (better-auth onLinkAccount)', () => {
     expect(workouts.data.items).toHaveLength(1);
     expect(workouts.data.items[0]).toMatchObject({ name: 'Guest Gains', ownerId: upgraded.userId });
 
-    const friends = await trpcQuery<{ id: string }[]>(
+    const friends = await trpcQuery<{ id: string; friendsSince: Date }[]>(
       app.server,
       'friends.list',
       undefined,
       upgraded.cookie,
     );
     expect(friends.data.map((f) => f.id)).toEqual([inviter.userId]);
+    expect(friends.data[0]!.friendsSince).toEqual(friendsSinceAsGuest); // survives the merge
 
     // The anonymous user row is deleted by better-auth after linking
     const [guestRows] = await app.db

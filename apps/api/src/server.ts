@@ -50,7 +50,10 @@ export function buildServer(options: BuildServerOptions = {}) {
     trpcRateLimit = { max: 30, windowMs: 60_000 },
   } = options;
 
-  const server = Fastify({ logger });
+  // trustProxy: the api is never exposed directly (Caddy in prod, Vite proxy in dev),
+  // so X-Forwarded-For is trustworthy — without it req.ip is the proxy and every
+  // user would share one rate-limit bucket (and better-auth would log proxy IPs).
+  const server = Fastify({ logger, trustProxy: true });
 
   if (authSecret === DEV_SECRET) {
     server.log.warn('BETTER_AUTH_SECRET is not set — using the dev-only fallback secret');

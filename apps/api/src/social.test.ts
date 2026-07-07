@@ -545,7 +545,7 @@ describe('plain HTTP link routes', () => {
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toContain('text/html');
     expect(res.body).toContain('OG &amp; &lt;Escaped&gt; Day — Buddy Pass');
-    expect(res.body).toContain('1 exercises · shared by Alice Owner');
+    expect(res.body).toContain('1 exercise · shared by Alice Owner');
     expect(res.body).toContain(`/share/${share.data.token}`);
 
     const unknown = await app.server.inject({ method: 'GET', url: '/s/nosuchtoken1' });

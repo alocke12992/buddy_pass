@@ -66,11 +66,11 @@
 ```
 buddy_pass/
 ├── apps/
-│   ├── api/            # ✅ Fastify + tRPC (better-auth + OG share pages arrive Phase 2/5)
-│   └── web/            # ✅ Vite React SPA (Router, React Query, Tailwind v4, shadcn/ui)
+│   ├── api/            # ✅ Fastify + tRPC + better-auth + OG share pages (full surface per plans/API.md)
+│   └── web/            # ✅ Vite React SPA (Router, React Query, Tailwind v4, shadcn/ui) — feature UI = Phases 3–5
 ├── packages/
-│   ├── db/             # ✅ skeleton (Drizzle client factory; schema/migrations/seeds = Phase 1)
-│   └── shared/         # ✅ Zod schemas, domain types, unit conversion
+│   ├── db/             # ✅ Drizzle schema + migrations + seed pipeline
+│   └── shared/         # ✅ Zod schemas (incl. API input contracts), domain types, unit conversion
 ├── infra/              # Terraform (VPC, EC2, RDS, S3, ECR, IAM) — Phase 2.5
 ├── docker-compose.yml  # ✅ postgres (default) + api/web under --profile full
 └── turbo.json          # ✅
@@ -78,11 +78,11 @@ buddy_pass/
 
 - `apps/mobile` (React Native/Expo) slots in later, reusing `packages/shared` + the tRPC client. shadcn/ui does not transfer; UI is per-platform.
 
-### Backend (`apps/api`)
-- Fastify; tRPC router mounted at `/trpc`; better-auth mounted at `/api/auth/*`
+### Backend (`apps/api`) — ✅ built, see plans/API.md
+- Fastify (`trustProxy` on — always behind Caddy/Vite proxy); tRPC router mounted at `/trpc`; better-auth mounted at `/api/auth/*`
 - Plain HTTP routes: `GET /s/:token` (share page w/ OG meta), `GET /f/:token` (friend link landing), `/health`
 - better-auth plugins: email/password + **anonymous** (guest sessions, `onLinkAccount` hook migrates guest data on signup)
-- `@fastify/rate-limit` on link-resolution + auth endpoints (tokens are 12+ char nanoid — high entropy, but belt & suspenders)
+- Rate limiting on token surfaces (tokens are 12+ char nanoid — high entropy, but belt & suspenders): per-IP tRPC middleware on `sharing.resolve`/`friends.acceptLink`, `@fastify/rate-limit` on `/s/:token` `/f/:token`, better-auth's built-in limiter on auth endpoints
 - Zod schemas from `packages/shared` validate all inputs
 
 ### Frontend (`apps/web`)
@@ -140,12 +140,14 @@ exercise_muscles   exercise_id FK, muscle_group_id FK,
 
 ### Workouts
 ```
-workouts           owner_id FK → user,
+workouts           owner_id FK → user, name text NOT NULL,
                    status ('planned'|'in_progress'|'completed'|'cancelled'),
                    visibility ('private'|'friends'),   -- default from user_settings
                    scheduled_for? timestamptz, started_at?, ended_at?,
                    notes?, origin_workout_id? FK → workouts
                    INDEX (owner_id, status), INDEX (origin_workout_id)
+                   -- name added by migration 0001 (API-phase schema delta, plans/API.md §1):
+                   --   share OG page, clone flow, and history lists all need a title
                    -- duration = ended_at - started_at (never stored)
                    -- clones of X = WHERE origin_workout_id = X (no cloned_ids array)
                    -- INIT.md's date → scheduled_for; user_id+creator_id → owner_id
@@ -232,7 +234,7 @@ Create (from library or clone) → `planned` → Start (`in_progress`, `started_
 
 ### Testing
 - **Vitest** everywhere; Turborepo runs per-package
-- API integration tests hit a real Postgres via **testcontainers**: clone semantics, guest→account merge, visibility rules, link revocation — the logic mocks lie about
+- ✅ API integration tests hit a real Postgres via **testcontainers**: clone semantics, guest→account merge, visibility rules, link revocation — the logic mocks lie about (45 tests, driven over HTTP through the real server; harness in `apps/api/src/test/harness.ts`)
 - `packages/shared` pure unit tests (conversions, zod schemas)
 - Playwright E2E deferred until the UI stabilizes (first candidate: share → guest clone → signup merge)
 
@@ -302,3 +304,4 @@ Plan of record: `plans/API.md` (§3 has the wiring facts). Everything in that pl
 - Env additions: `BETTER_AUTH_SECRET` (+ `BETTER_AUTH_URL`, `APP_ORIGIN` optional) — see `.env.example`; compose `--profile full` passes prod-shaped values; api dev script now loads root `.env` via `--env-file-if-exists`
 - Gotchas recorded for later phases: consume drizzle operators via `@buddy-pass/db` re-exports (a second peer-resolved drizzle-orm instance breaks type identity); raw SQL fragments bypass drizzle's decoders (map `date_trunc` etc. with `mapWith`); tRPC mutations require `content-type: application/json` even with empty bodies (415 otherwise)
 - Prod-parity smoke test surfaced two packaging fixes: `pg` is CJS and cannot be bundled into the ESM api build (tsup `external: ['pg']` + direct api dependency so `pnpm deploy` links it); the web image must copy `packages/db` since web's `tsc -b` follows `AppRouter` types into api source. Full `--profile full` stack verified through Caddy on :8080 (health, ping, OG share page, anonymous session → `profile.get`)
+- Post-review adjustments (same day): Fastify `trustProxy: true` — the api always sits behind Caddy/Vite proxy, and without it `req.ip` is the proxy's address, collapsing every user into one rate-limit bucket (and better-auth would log proxy IPs); friendship `created_at` carried through the guest merge so `friendsSince` survives signup; OG description pluralizes its exercise count

@@ -48,10 +48,11 @@ export function registerHttpRoutes(server: FastifyInstance, deps: { db: Database
       const redirectTo = `/share/${encodeURIComponent(token)}`;
       const resolution = await resolveShareToken(deps.db, token);
 
+      const count = resolution.ok ? resolution.workout.exerciseCount : 0;
       const html = resolution.ok
         ? ogPage({
             title: `${resolution.workout.name} — Buddy Pass`,
-            description: `${resolution.workout.exerciseCount} exercises · shared by ${resolution.owner.name} on Buddy Pass`,
+            description: `${count} exercise${count === 1 ? '' : 's'} · shared by ${resolution.owner.name} on Buddy Pass`,
             redirectTo,
           })
         : ogPage({

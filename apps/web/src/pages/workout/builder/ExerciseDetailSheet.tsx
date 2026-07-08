@@ -34,7 +34,7 @@ export function ExerciseDetailSheet({
 
   return (
     <Sheet open={exerciseId !== null} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent side="bottom" className="max-h-[85dvh] gap-0 rounded-t-2xl">
+      <SheetContent side="bottom" className="max-h-[85dvh] gap-0 overflow-hidden rounded-t-2xl">
         {detail.isPending && (
           <div className="space-y-3 p-4">
             <Skeleton className="h-6 w-2/3" />
@@ -64,7 +64,7 @@ export function ExerciseDetailSheet({
                 ))}
               </div>
             </SheetHeader>
-            <div className="flex-1 space-y-4 overflow-y-auto px-4 pb-4">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 pb-4">
               <div className="grid grid-cols-2 gap-2">
                 {detail.data.images.slice(0, 2).map((img) => (
                   <ExerciseImage

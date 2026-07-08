@@ -97,7 +97,8 @@ export function PickerSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="h-[94dvh] gap-0 rounded-t-2xl">
+      {/* h needs ! — the sheet's own data-[side=bottom]:h-auto out-specifies a plain h utility */}
+      <SheetContent side="bottom" className="h-[94dvh]! gap-0 overflow-hidden rounded-t-2xl">
         <SheetHeader className="gap-3 pb-2">
           <SheetTitle>Add exercises</SheetTitle>
           <div className="relative">
@@ -139,7 +140,8 @@ export function PickerSheet({
           </div>
         </SheetHeader>
 
-        <div className="flex-1 overflow-y-auto px-4">
+        {/* min-h-0: flex children won't shrink below content without it → no scroll */}
+        <div className="min-h-0 flex-1 overflow-y-auto px-4">
           {library.isPending && (
             <div className="space-y-2 py-2">
               {Array.from({ length: 8 }, (_, i) => (

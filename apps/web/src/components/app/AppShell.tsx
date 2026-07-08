@@ -1,6 +1,7 @@
 import { CalendarDays, CircleUser, House, Users } from 'lucide-react';
 import { NavLink, Outlet } from 'react-router';
 import { cn } from '@/lib/utils';
+import { ResumeBanner } from './ResumeBanner';
 import { Wordmark } from './Wordmark';
 
 const TABS = [
@@ -47,10 +48,12 @@ export function AppShell() {
 
       {/* Content */}
       <main className="lg:pl-60">
-        <div className="mx-auto w-full max-w-2xl px-4 pb-24 pt-6 lg:pb-10">
+        <div className="mx-auto w-full max-w-2xl px-4 pb-32 pt-6 lg:pb-20">
           <Outlet />
         </div>
       </main>
+
+      <ResumeBanner />
 
       {/* Bottom tab bar (<1024px) */}
       <nav

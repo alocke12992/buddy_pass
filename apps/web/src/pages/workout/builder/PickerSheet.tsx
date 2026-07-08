@@ -1,52 +1,126 @@
 import { useQuery } from '@tanstack/react-query';
-import { Check, Info, Search } from 'lucide-react';
+import { Check, ChevronDown, Info, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { ErrorCard } from '@/components/app/ErrorCard';
 import { ExerciseImage } from '@/components/app/ExerciseImage';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Spinner } from '@/components/ui/spinner';
 import type { ExerciseIndexEntry } from '@/lib/api-types';
 import { useTRPC } from '@/lib/trpc';
 import { cn } from '@/lib/utils';
 import { ExerciseDetailSheet } from './ExerciseDetailSheet';
 
 const RESULT_CAP = 60;
-const LEVELS = ['beginner', 'intermediate', 'expert'] as const;
+const LEVELS = [
+  { id: 'beginner', name: 'Beginner' },
+  { id: 'intermediate', name: 'Intermediate' },
+  { id: 'expert', name: 'Expert' },
+] as const;
 
-function ChipRow<T extends { id: string; name: string }>({
-  items,
-  selected,
-  onToggle,
+type FilterKind = 'difficulty' | 'muscle' | 'equipment';
+
+interface FilterOption {
+  id: string;
+  name: string;
+}
+
+/** Top-level filter menu button: shows the selection when one is active. */
+function FilterButton({
   label,
+  selection,
+  onClick,
 }: {
-  items: T[];
-  selected: string | null;
-  onToggle: (id: string) => void;
   label: string;
+  selection: string | null;
+  onClick: () => void;
 }) {
   return (
-    <div aria-label={label} className="flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none]">
-      {items.map((item) => (
-        <button
-          key={item.id}
-          type="button"
-          aria-pressed={selected === item.id}
-          onClick={() => onToggle(item.id)}
-          className={cn(
-            'h-8 shrink-0 rounded-full border px-3 text-xs font-medium whitespace-nowrap transition-colors',
-            selected === item.id
-              ? 'border-primary bg-primary/15 text-primary'
-              : 'border-border bg-input/30 text-muted-foreground',
-          )}
-        >
-          {item.name}
-        </button>
-      ))}
-    </div>
+    <button
+      type="button"
+      onClick={onClick}
+      aria-haspopup="dialog"
+      className={cn(
+        'flex h-11 min-w-0 items-center justify-between gap-1 rounded-lg border px-3 text-sm font-medium transition-colors',
+        selection
+          ? 'border-primary bg-primary/10 text-primary'
+          : 'border-border bg-input/30 text-muted-foreground hover:bg-muted',
+      )}
+    >
+      <span className="truncate">{selection ?? label}</span>
+      <ChevronDown aria-hidden className="size-4 shrink-0" />
+    </button>
+  );
+}
+
+/** Pop-up option list for one filter dimension; "All …" clears it. */
+function FilterSheet({
+  title,
+  clearLabel,
+  options,
+  selected,
+  open,
+  onOpenChange,
+  onSelect,
+}: {
+  title: string;
+  clearLabel: string;
+  options: readonly FilterOption[];
+  selected: string | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSelect: (id: string | null) => void;
+}) {
+  const pick = (id: string | null) => {
+    onSelect(id);
+    onOpenChange(false);
+  };
+  const row = (id: string | null, name: string) => {
+    const isSelected = selected === id;
+    return (
+      <button
+        key={id ?? '__all'}
+        type="button"
+        role="option"
+        aria-selected={isSelected}
+        onClick={() => pick(id)}
+        className={cn(
+          'flex h-11 w-full items-center justify-between rounded-lg border px-3 text-sm font-medium transition-colors',
+          isSelected
+            ? 'border-primary bg-primary/10 text-primary'
+            : 'border-transparent text-foreground hover:bg-muted',
+        )}
+      >
+        {name}
+        {isSelected && <Check aria-hidden className="size-4" />}
+      </button>
+    );
+  };
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        side="bottom"
+        className="max-h-[70dvh] gap-0 overflow-hidden rounded-t-2xl pb-[env(safe-area-inset-bottom)]"
+      >
+        <SheetHeader>
+          <SheetTitle>{title}</SheetTitle>
+          <SheetDescription className="sr-only">Pick a filter</SheetDescription>
+        </SheetHeader>
+        <div className="min-h-0 flex-1 space-y-1 overflow-y-auto px-4 pb-4">
+          {row(null, clearLabel)}
+          {options.map((option) => row(option.id, option.name))}
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -72,28 +146,68 @@ export function PickerSheet({
   const filters = useQuery(trpc.exercises.filters.queryOptions(undefined, { staleTime: Infinity }));
 
   const [search, setSearch] = useState('');
+  const [difficulty, setDifficulty] = useState<string | null>(null);
   const [muscle, setMuscle] = useState<string | null>(null);
   const [equipment, setEquipment] = useState<string | null>(null);
-  const [level, setLevel] = useState<string | null>(null);
+  const [openMenu, setOpenMenu] = useState<FilterKind | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
+
+  const muscleGroups = useMemo(() => filters.data?.muscleGroups ?? [], [filters.data]);
+  const equipments = useMemo(() => filters.data?.equipments ?? [], [filters.data]);
 
   const results = useMemo(() => {
     if (!library.data) return [];
     const q = search.trim().toLowerCase();
+    const muscleName = muscleGroups.find((m) => m.id === muscle)?.name;
     return library.data.filter((e) => {
       if (q && !e.name.toLowerCase().includes(q)) return false;
-      if (level && e.level !== level) return false;
+      if (difficulty && e.level !== difficulty) return false;
       if (equipment && e.equipment?.id !== equipment) return false;
       if (muscle) {
-        const muscles = [...e.primaryMuscles, ...e.secondaryMuscles];
-        const name = filters.data?.muscleGroups.find((m) => m.id === muscle)?.name;
-        if (!name || !muscles.includes(name)) return false;
+        if (!muscleName) return false;
+        if (![...e.primaryMuscles, ...e.secondaryMuscles].includes(muscleName)) return false;
       }
       return true;
     });
-  }, [library.data, filters.data, search, muscle, equipment, level]);
+  }, [library.data, muscleGroups, search, difficulty, muscle, equipment]);
 
   const addedTotal = [...addedCounts.values()].reduce((a, b) => a + b, 0);
+
+  const menuConfig: Record<
+    FilterKind,
+    {
+      title: string;
+      clearLabel: string;
+      options: readonly FilterOption[];
+      selected: string | null;
+      onSelect: (id: string | null) => void;
+    }
+  > = {
+    difficulty: {
+      title: 'Difficulty',
+      clearLabel: 'All difficulties',
+      options: LEVELS,
+      selected: difficulty,
+      onSelect: setDifficulty,
+    },
+    muscle: {
+      title: 'Muscle group',
+      clearLabel: 'All muscle groups',
+      options: muscleGroups,
+      selected: muscle,
+      onSelect: setMuscle,
+    },
+    equipment: {
+      title: 'Equipment',
+      clearLabel: 'All equipment',
+      options: equipments,
+      selected: equipment,
+      onSelect: setEquipment,
+    },
+  };
+
+  const selectionName = (options: readonly FilterOption[], id: string | null) =>
+    options.find((o) => o.id === id)?.name ?? null;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -114,29 +228,22 @@ export function PickerSheet({
               className="h-11 pl-9"
             />
           </div>
-          <div className="space-y-1.5">
-            <ChipRow
-              label="Level"
-              items={LEVELS.map((l) => ({ id: l, name: l[0]!.toUpperCase() + l.slice(1) }))}
-              selected={level}
-              onToggle={(id) => setLevel((v) => (v === id ? null : id))}
+          <div className="grid grid-cols-3 gap-2">
+            <FilterButton
+              label="Difficulty"
+              selection={selectionName(LEVELS, difficulty)}
+              onClick={() => setOpenMenu('difficulty')}
             />
-            {filters.data && (
-              <>
-                <ChipRow
-                  label="Muscle group"
-                  items={filters.data.muscleGroups}
-                  selected={muscle}
-                  onToggle={(id) => setMuscle((v) => (v === id ? null : id))}
-                />
-                <ChipRow
-                  label="Equipment"
-                  items={filters.data.equipments}
-                  selected={equipment}
-                  onToggle={(id) => setEquipment((v) => (v === id ? null : id))}
-                />
-              </>
-            )}
+            <FilterButton
+              label="Muscle group"
+              selection={selectionName(muscleGroups, muscle)}
+              onClick={() => setOpenMenu('muscle')}
+            />
+            <FilterButton
+              label="Equipment"
+              selection={selectionName(equipments, equipment)}
+              onClick={() => setOpenMenu('equipment')}
+            />
           </div>
         </SheetHeader>
 
@@ -209,11 +316,6 @@ export function PickerSheet({
               Showing {RESULT_CAP} of {results.length} — refine your search
             </p>
           )}
-          {filters.isPending && library.isSuccess && (
-            <div className="flex justify-center py-2">
-              <Spinner className="size-4 text-muted-foreground" />
-            </div>
-          )}
         </div>
 
         <div className="border-t p-4">
@@ -221,6 +323,18 @@ export function PickerSheet({
             Done{addedTotal > 0 ? ` · ${addedTotal} exercise${addedTotal === 1 ? '' : 's'}` : ''}
           </Button>
         </div>
+
+        {openMenu && (
+          <FilterSheet
+            title={menuConfig[openMenu].title}
+            clearLabel={menuConfig[openMenu].clearLabel}
+            options={menuConfig[openMenu].options}
+            selected={menuConfig[openMenu].selected}
+            open
+            onOpenChange={(next) => !next && setOpenMenu(null)}
+            onSelect={menuConfig[openMenu].onSelect}
+          />
+        )}
 
         <ExerciseDetailSheet
           exerciseId={detailId}

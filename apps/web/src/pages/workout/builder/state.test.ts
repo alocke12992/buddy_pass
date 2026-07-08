@@ -5,10 +5,12 @@ import {
   addSet,
   builderFromDoc,
   builderToInput,
+  buildSuperset,
   emptyBuilder,
   linkWithPrevious,
   moveExercise,
   removeExercise,
+  replaceExercise,
   toggleExercise,
   unlinkFromSuperset,
 } from './state';
@@ -89,6 +91,48 @@ describe('toggleExercise (picker taps)', () => {
     s = linkWithPrevious(s, s.exercises[1]!.key);
     s = toggleExercise(s, entry('a'));
     expect(s.exercises.map((e) => e.exercise.id)).toEqual(['b', 'c']);
+    expect(s.exercises.every((e) => e.superSetId === null)).toBe(true);
+  });
+});
+
+describe('replaceExercise', () => {
+  it('swaps the movement but keeps sets, superset, and position', () => {
+    let s = threeExercises();
+    s = linkWithPrevious(s, s.exercises[1]!.key);
+    const target = s.exercises[1]!;
+    const groupId = target.superSetId;
+    const sets = target.sets;
+    s = replaceExercise(s, target.key, entry('z'));
+    expect(s.exercises.map((e) => e.exercise.id)).toEqual(['a', 'z', 'c']);
+    expect(s.exercises[1]!.superSetId).toBe(groupId);
+    expect(s.exercises[1]!.sets).toBe(sets);
+  });
+});
+
+describe('buildSuperset', () => {
+  it('pulls non-adjacent members next to the anchor under one fresh id', () => {
+    let s = threeExercises(); // a, b, c
+    s = buildSuperset(s, s.exercises[0]!.key, [s.exercises[2]!.key]); // a + c
+    expect(s.exercises.map((e) => e.exercise.id)).toEqual(['a', 'c', 'b']);
+    expect(s.exercises[0]!.superSetId).not.toBeNull();
+    expect(s.exercises[0]!.superSetId).toBe(s.exercises[1]!.superSetId);
+    expect(s.exercises[2]!.superSetId).toBeNull();
+  });
+
+  it('re-editing redefines the group: unselected former members leave it', () => {
+    let s = threeExercises();
+    s = linkWithPrevious(s, s.exercises[1]!.key); // a + b grouped
+    s = buildSuperset(s, s.exercises[0]!.key, [s.exercises[2]!.key]); // now a + c
+    expect(s.exercises.map((e) => e.exercise.id)).toEqual(['a', 'c', 'b']);
+    const [a, c, b] = s.exercises;
+    expect(a!.superSetId).toBe(c!.superSetId);
+    expect(b!.superSetId).toBeNull();
+  });
+
+  it('an empty selection dissolves the anchor group', () => {
+    let s = threeExercises();
+    s = linkWithPrevious(s, s.exercises[1]!.key);
+    s = buildSuperset(s, s.exercises[0]!.key, []);
     expect(s.exercises.every((e) => e.superSetId === null)).toBe(true);
   });
 });

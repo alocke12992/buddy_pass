@@ -2,7 +2,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { UnitPreference } from '@buddy-pass/shared';
 import { lbToKg } from '@buddy-pass/shared';
-import { Copy, GripVertical, Link2, Plus, Trash2, Unlink2, X } from 'lucide-react';
+import { Copy, EllipsisVertical, GripVertical, Plus, X } from 'lucide-react';
 import { ExerciseImage } from '@/components/app/ExerciseImage';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -93,27 +93,20 @@ function SetRow({
 
 export function ExerciseCard({
   item,
-  index,
   unit,
   grouped,
-  canLinkWithPrevious,
-  onLink,
-  onUnlink,
-  onRemove,
+  onOpenMenu,
   onPatchSet,
   onAddSet,
   onDuplicateSet,
   onRemoveSet,
 }: {
   item: BuilderExercise;
-  index: number;
   unit: UnitPreference;
   /** Position within a rendered superset group, for the bracket rail. */
   grouped: 'none' | 'first' | 'middle' | 'last';
-  canLinkWithPrevious: boolean;
-  onLink: () => void;
-  onUnlink: () => void;
-  onRemove: () => void;
+  /** Opens the 3-dot menu (replace / superset / remove). */
+  onOpenMenu: () => void;
   onPatchSet: (setKey: string, patch: Partial<Omit<BuilderSet, 'key'>>) => void;
   onAddSet: () => void;
   onDuplicateSet: (setKey: string) => void;
@@ -163,35 +156,13 @@ export function ExerciseCard({
               {grouped !== 'none' && <span className="text-primary"> · superset</span>}
             </p>
           </div>
-          {index > 0 &&
-            (item.superSetId !== null ? (
-              <Button
-                variant="ghost"
-                size="icon-lg"
-                aria-label="Unlink from superset"
-                onClick={onUnlink}
-              >
-                <Unlink2 className="text-primary" />
-              </Button>
-            ) : (
-              canLinkWithPrevious && (
-                <Button
-                  variant="ghost"
-                  size="icon-lg"
-                  aria-label="Link with previous exercise (superset)"
-                  onClick={onLink}
-                >
-                  <Link2 className="text-muted-foreground" />
-                </Button>
-              )
-            ))}
           <Button
             variant="ghost"
             size="icon-lg"
-            aria-label={`Remove ${item.exercise.name}`}
-            onClick={onRemove}
+            aria-label={`Options for ${item.exercise.name}`}
+            onClick={onOpenMenu}
           >
-            <Trash2 className="text-muted-foreground" />
+            <EllipsisVertical className="text-muted-foreground" />
           </Button>
         </div>
 

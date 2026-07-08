@@ -31,23 +31,26 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import type { WorkoutDoc } from '@/lib/api-types';
+import type { ExerciseIndexEntry, WorkoutDoc } from '@/lib/api-types';
 import { useTRPC } from '@/lib/trpc';
 import { ExerciseCard } from './builder/ExerciseCard';
+import { ExerciseMenuSheet } from './builder/ExerciseMenuSheet';
 import { PickerSheet } from './builder/PickerSheet';
+import { ReplaceSheet } from './builder/ReplaceSheet';
 import { SaveSheet } from './builder/SaveSheet';
+import { SupersetSheet } from './builder/SupersetSheet';
 import {
   addSet,
   builderFromDoc,
   builderToInput,
+  buildSuperset,
   duplicateSet,
   emptyBuilder,
-  linkWithPrevious,
   moveExercise,
   removeExercise,
   removeSet,
+  replaceExercise,
   toggleExercise,
-  unlinkFromSuperset,
   updateSet,
   type BuilderState,
 } from './builder/state';
@@ -72,6 +75,14 @@ function BuilderEditor({ initial, workoutId }: { initial: BuilderState; workoutI
   const [saveOpen, setSaveOpen] = useState(false);
   const [nameError, setNameError] = useState(false);
   const [saved, setSaved] = useState(false);
+  // 3-dot menu flows, keyed by the exercise's builder key
+  const [menuKey, setMenuKey] = useState<string | null>(null);
+  const [supersetKey, setSupersetKey] = useState<string | null>(null);
+  const [replaceKey, setReplaceKey] = useState<string | null>(null);
+  const [replaceSearch, setReplaceSearch] = useState<{
+    key: string;
+    muscleGroupId: string | null;
+  } | null>(null);
 
   const profile = useQuery(trpc.profile.get.queryOptions());
   const unit: UnitPreference = profile.data?.settings?.unitPreference ?? 'metric';
@@ -131,6 +142,22 @@ function BuilderEditor({ initial, workoutId }: { initial: BuilderState; workoutI
     () => new Set(state.exercises.map((e) => e.exercise.id)),
     [state.exercises],
   );
+
+  const exerciseByKey = (key: string | null) =>
+    key === null ? undefined : state.exercises.find((e) => e.key === key);
+
+  const doReplace = (key: string, entry: ExerciseIndexEntry) => {
+    const current = exerciseByKey(key);
+    if (!current) return;
+    if (entry.id !== current.exercise.id && addedIds.has(entry.id)) {
+      toast.error(`${entry.name} is already in this workout`);
+      return;
+    }
+    apply((s) => replaceExercise(s, key, entry));
+    setReplaceKey(null);
+    setReplaceSearch(null);
+    toast.success(`Swapped in ${entry.name} — sets kept`);
+  };
 
   const openSave = () => {
     if (state.name.trim() === '') {
@@ -206,13 +233,9 @@ function BuilderEditor({ initial, workoutId }: { initial: BuilderState; workoutI
                   <ExerciseCard
                     key={item.key}
                     item={item}
-                    index={index}
                     unit={unit}
                     grouped={groupedPosition(state, index)}
-                    canLinkWithPrevious={index > 0}
-                    onLink={() => apply((s) => linkWithPrevious(s, item.key))}
-                    onUnlink={() => apply((s) => unlinkFromSuperset(s, item.key))}
-                    onRemove={() => apply((s) => removeExercise(s, item.key))}
+                    onOpenMenu={() => setMenuKey(item.key)}
                     onPatchSet={(setKey, patch) =>
                       apply((s) => updateSet(s, item.key, setKey, patch))
                     }
@@ -245,6 +268,75 @@ function BuilderEditor({ initial, workoutId }: { initial: BuilderState; workoutI
         addedIds={addedIds}
         onToggle={(entry) => apply((s) => toggleExercise(s, entry))}
       />
+
+      {/* 3-dot menu + its flows (mounted fresh per open so state seeds correctly) */}
+      {(() => {
+        const menuExercise = exerciseByKey(menuKey);
+        return menuExercise ? (
+          <ExerciseMenuSheet
+            open
+            exerciseName={menuExercise.exercise.name}
+            inSuperset={menuExercise.superSetId !== null}
+            onOpenChange={(next) => !next && setMenuKey(null)}
+            onReplace={() => {
+              setMenuKey(null);
+              setReplaceKey(menuExercise.key);
+            }}
+            onSuperset={() => {
+              setMenuKey(null);
+              setSupersetKey(menuExercise.key);
+            }}
+            onRemove={() => {
+              setMenuKey(null);
+              apply((s) => removeExercise(s, menuExercise.key));
+            }}
+          />
+        ) : null;
+      })()}
+
+      {(() => {
+        const anchor = exerciseByKey(supersetKey);
+        return anchor ? (
+          <SupersetSheet
+            anchor={anchor}
+            others={state.exercises.filter((e) => e.key !== anchor.key)}
+            onOpenChange={(next) => !next && setSupersetKey(null)}
+            onConfirm={(memberKeys) => {
+              apply((s) => buildSuperset(s, anchor.key, memberKeys));
+              setSupersetKey(null);
+            }}
+          />
+        ) : null;
+      })()}
+
+      {(() => {
+        const replacing = exerciseByKey(replaceKey);
+        return replacing ? (
+          <ReplaceSheet
+            exercise={replacing}
+            addedIds={addedIds}
+            onOpenChange={(next) => !next && setReplaceKey(null)}
+            onPick={(entry) => doReplace(replacing.key, entry)}
+            onSearchAll={(muscleGroupId) => {
+              setReplaceKey(null);
+              setReplaceSearch({ key: replacing.key, muscleGroupId });
+            }}
+          />
+        ) : null;
+      })()}
+
+      {replaceSearch && (
+        <PickerSheet
+          open
+          mode="pick"
+          sheetTitle="Choose a replacement"
+          initialMuscleId={replaceSearch.muscleGroupId}
+          addedIds={addedIds}
+          onToggle={() => undefined}
+          onPick={(entry) => doReplace(replaceSearch.key, entry)}
+          onOpenChange={(next) => !next && setReplaceSearch(null)}
+        />
+      )}
 
       <SaveSheet
         open={saveOpen}

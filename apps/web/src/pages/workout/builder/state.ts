@@ -126,6 +126,52 @@ export function moveExercise(state: BuilderState, from: number, to: number): Bui
   return normalizeSupersets({ ...state, exercises });
 }
 
+/** Swap the movement, keep the work: sets, superset membership, and position survive. */
+export function replaceExercise(
+  state: BuilderState,
+  key: string,
+  entry: ExerciseIndexEntry,
+): BuilderState {
+  return {
+    ...state,
+    exercises: state.exercises.map((e) => (e.key === key ? { ...e, exercise: entry } : e)),
+  };
+}
+
+/**
+ * Redefine the anchor's superset as anchor + the selected members: selection
+ * is pulled adjacent (right after the anchor, original relative order) under
+ * a fresh group id. Former members not re-selected leave grouping; an empty
+ * selection dissolves the group.
+ */
+export function buildSuperset(
+  state: BuilderState,
+  anchorKey: string,
+  memberKeys: readonly string[],
+): BuilderState {
+  const anchor = state.exercises.find((e) => e.key === anchorKey);
+  if (!anchor) return state;
+  const selected = new Set(memberKeys.filter((k) => k !== anchorKey));
+  const oldGroupId = anchor.superSetId;
+
+  const cleared = state.exercises.map((e) =>
+    oldGroupId !== null && e.superSetId === oldGroupId ? { ...e, superSetId: null } : e,
+  );
+  if (selected.size === 0) return normalizeSupersets({ ...state, exercises: cleared });
+
+  const groupId = newKey();
+  const members = cleared
+    .filter((e) => selected.has(e.key))
+    .map((e) => ({ ...e, superSetId: groupId }));
+  const exercises: BuilderExercise[] = [];
+  for (const e of cleared) {
+    if (selected.has(e.key)) continue; // re-inserted right after the anchor
+    if (e.key === anchorKey) exercises.push({ ...e, superSetId: groupId }, ...members);
+    else exercises.push(e);
+  }
+  return normalizeSupersets({ ...state, exercises });
+}
+
 /** "Link with previous" (FRONTEND.md §3.2): joins the previous exercise's group, minting one if needed. */
 export function linkWithPrevious(state: BuilderState, key: string): BuilderState {
   const index = state.exercises.findIndex((e) => e.key === key);

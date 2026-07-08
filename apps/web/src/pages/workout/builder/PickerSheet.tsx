@@ -134,12 +134,22 @@ export function PickerSheet({
   onOpenChange,
   onToggle,
   addedIds,
+  mode = 'toggle',
+  sheetTitle,
+  initialMuscleId = null,
+  onPick,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Tapping toggles membership: adds when absent, removes when already in the workout. */
   onToggle: (entry: ExerciseIndexEntry) => void;
   addedIds: ReadonlySet<string>;
+  /** 'pick' = choose exactly one (replace flow): already-added rows are disabled. */
+  mode?: 'toggle' | 'pick';
+  sheetTitle?: string;
+  /** Preset muscle filter — read once on mount, so mount a fresh instance per open. */
+  initialMuscleId?: string | null;
+  onPick?: (entry: ExerciseIndexEntry) => void;
 }) {
   const trpc = useTRPC();
   const library = useQuery(trpc.exercises.list.queryOptions(undefined, { staleTime: Infinity }));
@@ -147,7 +157,7 @@ export function PickerSheet({
 
   const [search, setSearch] = useState('');
   const [difficulty, setDifficulty] = useState<string | null>(null);
-  const [muscle, setMuscle] = useState<string | null>(null);
+  const [muscle, setMuscle] = useState<string | null>(initialMuscleId);
   const [equipment, setEquipment] = useState<string | null>(null);
   const [openMenu, setOpenMenu] = useState<FilterKind | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -214,7 +224,7 @@ export function PickerSheet({
       {/* h needs ! — the sheet's own data-[side=bottom]:h-auto out-specifies a plain h utility */}
       <SheetContent side="bottom" className="h-[94dvh]! gap-0 overflow-hidden rounded-t-2xl">
         <SheetHeader className="gap-3 pb-2">
-          <SheetTitle>Add exercises</SheetTitle>
+          <SheetTitle>{sheetTitle ?? 'Add exercises'}</SheetTitle>
           <div className="relative">
             <Search
               aria-hidden
@@ -274,9 +284,10 @@ export function PickerSheet({
                   <div className="flex items-center gap-3 py-2">
                     <button
                       type="button"
-                      aria-pressed={added}
-                      onClick={() => onToggle(entry)}
-                      className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left hover:bg-muted/50"
+                      aria-pressed={mode === 'toggle' ? added : undefined}
+                      disabled={mode === 'pick' && added}
+                      onClick={() => (mode === 'pick' ? onPick?.(entry) : onToggle(entry))}
+                      className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left hover:bg-muted/50 disabled:opacity-50"
                     >
                       <ExerciseImage
                         path={entry.thumbnail}
@@ -320,8 +331,15 @@ export function PickerSheet({
         </div>
 
         <div className="border-t p-4">
-          <Button size="xl" className="w-full" onClick={() => onOpenChange(false)}>
-            Done{addedTotal > 0 ? ` · ${addedTotal} selected` : ''}
+          <Button
+            size="xl"
+            variant={mode === 'pick' ? 'outline' : 'default'}
+            className="w-full"
+            onClick={() => onOpenChange(false)}
+          >
+            {mode === 'pick'
+              ? 'Cancel'
+              : `Done${addedTotal > 0 ? ` · ${addedTotal} selected` : ''}`}
           </Button>
         </div>
 
@@ -339,10 +357,11 @@ export function PickerSheet({
 
         <ExerciseDetailSheet
           exerciseId={detailId}
-          added={detailId !== null && addedIds.has(detailId)}
+          added={mode === 'toggle' && detailId !== null && addedIds.has(detailId)}
           onClose={() => setDetailId(null)}
           onToggle={(entry) => {
-            onToggle(entry);
+            if (mode === 'pick') onPick?.(entry);
+            else onToggle(entry);
             setDetailId(null);
           }}
         />

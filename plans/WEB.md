@@ -115,7 +115,7 @@ Milestones land as individual commits/PRs in this order; 4→5 and 6→7 pairs m
 All milestones landed as individual commits (`7e8bf11` → M9), each gated on `pnpm turbo lint typecheck test build` + `format:check`; flows F1–F7 exercised end-to-end through the Vite proxy and the final prod-parity `--profile full` smoke (health, superjson ping, OG bounce, anonymous session via Caddy).
 
 - **Structure as planned (§3)** plus: `lib/api-types.ts` (`inferRouterOutputs` — the only api import is the type), `pages/workout/live/` (interleaved-order + rest-timer pure modules), `pages/workout/builder/state.ts` (immutable editor model). 30 web unit tests (5 files) cover hero priority, superset normalization, interleave/current-set/summary math, rest-timer, and log-day bucketing; height/weight conversion tests live in `packages/shared`.
-- **Dev-proxy parity fix**: Vite now forwards `/s` `/f` `/health` like prod Caddy, so minted short links bounce through the OG page in dev (`2dc6e9f`).
+- **Dev-proxy parity fix**: Vite now forwards `/s/` `/f/` `/health` like prod Caddy, so minted short links bounce through the OG page in dev (`2dc6e9f`). Gotcha: Vite proxy keys are raw prefixes — they must be slash-terminated (`'/s/'` not `'/s'`), or `/src/*` modules and `/favicon.svg` get proxied to Fastify and the dev app renders blank.
 - **Gotchas earned**:
   - better-auth returns 403 on auth POSTs that carry a session cookie but no `Origin` header (CSRF check) — browsers always send it; curl/scripted tests must too.
   - React Compiler lint: RHF `watch()` → use `useWatch`; dnd-kit's `useSortable` return must be destructured; no `Date.now()` in render-scoped closures (wrap in module-level helpers, see `restTimer.ts`).

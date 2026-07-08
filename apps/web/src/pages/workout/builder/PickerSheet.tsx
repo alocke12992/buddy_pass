@@ -132,14 +132,14 @@ function FilterSheet({
 export function PickerSheet({
   open,
   onOpenChange,
-  onAdd,
-  addedCounts,
+  onToggle,
+  addedIds,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onAdd: (entry: ExerciseIndexEntry) => void;
-  /** exerciseId → how many times it's already in the workout. */
-  addedCounts: Map<string, number>;
+  /** Tapping toggles membership: adds when absent, removes when already in the workout. */
+  onToggle: (entry: ExerciseIndexEntry) => void;
+  addedIds: ReadonlySet<string>;
 }) {
   const trpc = useTRPC();
   const library = useQuery(trpc.exercises.list.queryOptions(undefined, { staleTime: Infinity }));
@@ -171,7 +171,7 @@ export function PickerSheet({
     });
   }, [library.data, muscleGroups, search, difficulty, muscle, equipment]);
 
-  const addedTotal = [...addedCounts.values()].reduce((a, b) => a + b, 0);
+  const addedTotal = addedIds.size;
 
   const menuConfig: Record<
     FilterKind,
@@ -268,13 +268,14 @@ export function PickerSheet({
           )}
           <ul className="divide-y divide-border/60">
             {results.slice(0, RESULT_CAP).map((entry) => {
-              const count = addedCounts.get(entry.id) ?? 0;
+              const added = addedIds.has(entry.id);
               return (
                 <li key={entry.id}>
                   <div className="flex items-center gap-3 py-2">
                     <button
                       type="button"
-                      onClick={() => onAdd(entry)}
+                      aria-pressed={added}
+                      onClick={() => onToggle(entry)}
                       className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left hover:bg-muted/50"
                     >
                       <ExerciseImage
@@ -291,10 +292,10 @@ export function PickerSheet({
                           {entry.equipment ? ` · ${entry.equipment.name}` : ''}
                         </span>
                       </span>
-                      {count > 0 && (
+                      {added && (
                         <Badge className="shrink-0 bg-primary/15 text-primary">
                           <Check aria-hidden />
-                          {count > 1 ? `×${count}` : 'Added'}
+                          Added
                         </Badge>
                       )}
                     </button>
@@ -320,7 +321,7 @@ export function PickerSheet({
 
         <div className="border-t p-4">
           <Button size="xl" className="w-full" onClick={() => onOpenChange(false)}>
-            Done{addedTotal > 0 ? ` · ${addedTotal} exercise${addedTotal === 1 ? '' : 's'}` : ''}
+            Done{addedTotal > 0 ? ` · ${addedTotal} selected` : ''}
           </Button>
         </div>
 
@@ -338,9 +339,10 @@ export function PickerSheet({
 
         <ExerciseDetailSheet
           exerciseId={detailId}
+          added={detailId !== null && addedIds.has(detailId)}
           onClose={() => setDetailId(null)}
-          onAdd={(entry) => {
-            onAdd(entry);
+          onToggle={(entry) => {
+            onToggle(entry);
             setDetailId(null);
           }}
         />

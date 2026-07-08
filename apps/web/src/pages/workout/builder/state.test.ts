@@ -9,6 +9,7 @@ import {
   linkWithPrevious,
   moveExercise,
   removeExercise,
+  toggleExercise,
   unlinkFromSuperset,
 } from './state';
 
@@ -70,6 +71,24 @@ describe('supersets', () => {
     let s = threeExercises();
     s = linkWithPrevious(s, s.exercises[1]!.key);
     s = removeExercise(s, s.exercises[0]!.key);
+    expect(s.exercises.every((e) => e.superSetId === null)).toBe(true);
+  });
+});
+
+describe('toggleExercise (picker taps)', () => {
+  it('adds when absent, removes when present — never duplicates', () => {
+    let s = emptyBuilder();
+    s = toggleExercise(s, entry('a'));
+    expect(s.exercises).toHaveLength(1);
+    s = toggleExercise(s, entry('a'));
+    expect(s.exercises).toHaveLength(0);
+  });
+
+  it('removing one member of a superset pair dissolves the group', () => {
+    let s = threeExercises();
+    s = linkWithPrevious(s, s.exercises[1]!.key);
+    s = toggleExercise(s, entry('a'));
+    expect(s.exercises.map((e) => e.exercise.id)).toEqual(['b', 'c']);
     expect(s.exercises.every((e) => e.superSetId === null)).toBe(true);
   });
 });

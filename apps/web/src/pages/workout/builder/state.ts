@@ -105,6 +105,19 @@ export function removeExercise(state: BuilderState, key: string): BuilderState {
   });
 }
 
+/**
+ * Picker taps toggle membership: tapping an already-added exercise removes it
+ * (set config included) — the picker never creates duplicates.
+ */
+export function toggleExercise(state: BuilderState, entry: ExerciseIndexEntry): BuilderState {
+  const exists = state.exercises.some((e) => e.exercise.id === entry.id);
+  if (!exists) return addExercise(state, entry);
+  return normalizeSupersets({
+    ...state,
+    exercises: state.exercises.filter((e) => e.exercise.id !== entry.id),
+  });
+}
+
 export function moveExercise(state: BuilderState, from: number, to: number): BuilderState {
   if (from === to || from < 0 || to < 0) return state;
   const exercises = [...state.exercises];

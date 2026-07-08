@@ -37,7 +37,6 @@ import { ExerciseCard } from './builder/ExerciseCard';
 import { PickerSheet } from './builder/PickerSheet';
 import { SaveSheet } from './builder/SaveSheet';
 import {
-  addExercise,
   addSet,
   builderFromDoc,
   builderToInput,
@@ -47,6 +46,7 @@ import {
   moveExercise,
   removeExercise,
   removeSet,
+  toggleExercise,
   unlinkFromSuperset,
   updateSet,
   type BuilderState,
@@ -127,12 +127,10 @@ function BuilderEditor({ initial, workoutId }: { initial: BuilderState; workoutI
     });
   };
 
-  const addedCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const e of state.exercises)
-      counts.set(e.exercise.id, (counts.get(e.exercise.id) ?? 0) + 1);
-    return counts;
-  }, [state.exercises]);
+  const addedIds = useMemo(
+    () => new Set(state.exercises.map((e) => e.exercise.id)),
+    [state.exercises],
+  );
 
   const openSave = () => {
     if (state.name.trim() === '') {
@@ -244,8 +242,8 @@ function BuilderEditor({ initial, workoutId }: { initial: BuilderState; workoutI
       <PickerSheet
         open={pickerOpen}
         onOpenChange={setPickerOpen}
-        addedCounts={addedCounts}
-        onAdd={(entry) => apply((s) => addExercise(s, entry))}
+        addedIds={addedIds}
+        onToggle={(entry) => apply((s) => toggleExercise(s, entry))}
       />
 
       <SaveSheet

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Plus } from 'lucide-react';
+import { Minus, Plus } from 'lucide-react';
 import { ExerciseImage } from '@/components/app/ExerciseImage';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -17,12 +17,15 @@ import { useTRPC } from '@/lib/trpc';
 /** Mini detail from the picker (FRONTEND.md §3.2): instructions + images. */
 export function ExerciseDetailSheet({
   exerciseId,
+  added,
   onClose,
-  onAdd,
+  onToggle,
 }: {
   exerciseId: string | null;
+  /** Already in the workout — the action becomes removal. */
+  added: boolean;
   onClose: () => void;
-  onAdd: (entry: ExerciseIndexEntry) => void;
+  onToggle: (entry: ExerciseIndexEntry) => void;
 }) {
   const trpc = useTRPC();
   const detail = useQuery(
@@ -84,9 +87,14 @@ export function ExerciseDetailSheet({
               )}
             </div>
             <div className="border-t p-4">
-              <Button size="xl" className="w-full" onClick={() => onAdd(detail.data)}>
-                <Plus data-icon="inline-start" />
-                Add to workout
+              <Button
+                size="xl"
+                variant={added ? 'outline' : 'default'}
+                className="w-full"
+                onClick={() => onToggle(detail.data)}
+              >
+                {added ? <Minus data-icon="inline-start" /> : <Plus data-icon="inline-start" />}
+                {added ? 'Remove from workout' : 'Add to workout'}
               </Button>
             </div>
           </>

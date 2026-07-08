@@ -14,6 +14,7 @@
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx src/seed/index.ts --demo",
     "db:seed:library": "tsx src/seed/index.ts",
+    "db:images": "tsx src/seed/images.ts",
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {

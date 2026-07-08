@@ -17,6 +17,7 @@
     "db:generate": "pnpm --filter @buddy-pass/db db:generate",
     "db:migrate": "pnpm --filter @buddy-pass/db db:migrate",
     "db:seed": "pnpm --filter @buddy-pass/db db:seed",
+    "db:images": "pnpm --filter @buddy-pass/db db:images",
     "db:studio": "pnpm --filter @buddy-pass/db db:studio"
   },
   "devDependencies": {

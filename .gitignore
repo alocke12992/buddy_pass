@@ -11,6 +11,9 @@ coverage/
 .env.*
 !.env.example
 
+# exercise images — fetched locally via `pnpm db:images` (S3 in prod, INFRA M6)
+apps/web/public/exercise-images/
+
 # tooling
 *.log
 .DS_Store

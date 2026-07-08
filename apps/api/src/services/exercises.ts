@@ -33,8 +33,8 @@ export function toExerciseIndexEntry(row: ExerciseWithRelations) {
     secondaryMuscles: row.muscles
       .filter((m) => m.role === 'secondary')
       .map((m) => m.muscleGroup.name),
-    /** Relative path; client prepends IMAGE_BASE_URL. */
-    thumbnail: row.images[0] ?? null,
+    /** Relative path; client prepends IMAGE_BASE_URL. `.at()` keeps the inferred wire type honestly nullable (API.md §2.1). */
+    thumbnail: row.images.at(0) ?? null,
   };
 }
 export type ExerciseIndexEntry = ReturnType<typeof toExerciseIndexEntry>;

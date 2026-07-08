@@ -1,8 +1,10 @@
 import type { UnitPreference } from '@buddy-pass/shared';
 import { useQuery } from '@tanstack/react-query';
-import { Check, Sparkles } from 'lucide-react';
+import { Check, Share2, Sparkles } from 'lucide-react';
+import { useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router';
 import { ErrorCard } from '@/components/app/ErrorCard';
+import { ShareSheet } from '@/components/app/ShareSheet';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuthentication } from '@/context/Authentication';
@@ -19,11 +21,12 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-/** Post-workout summary (FRONTEND.md §3.4). Share arrives with milestone 8; no PR callouts (open Q2). */
+/** Post-workout summary (FRONTEND.md §3.4). No PR callouts (open Q2). */
 export default function SummaryPage() {
   const { id = '' } = useParams<{ id: string }>();
   const trpc = useTRPC();
   const { user } = useAuthentication();
+  const [shareOpen, setShareOpen] = useState(false);
 
   const doc = useQuery(trpc.workouts.byId.queryOptions({ id }));
   const profile = useQuery(trpc.profile.get.queryOptions());
@@ -112,11 +115,22 @@ export default function SummaryPage() {
         </section>
       )}
 
-      <div className="mt-auto">
-        <Button size="workout" className="w-full" render={<Link to="/" />}>
+      <div className="mt-auto space-y-2">
+        <Button size="workout" className="w-full" onClick={() => setShareOpen(true)}>
+          <Share2 data-icon="inline-start" />
+          Share
+        </Button>
+        <Button variant="outline" size="xl" className="w-full" render={<Link to="/" />}>
           Done
         </Button>
       </div>
+
+      <ShareSheet
+        workoutId={doc.data.id}
+        isPrivate={doc.data.visibility === 'private'}
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+      />
     </div>
   );
 }

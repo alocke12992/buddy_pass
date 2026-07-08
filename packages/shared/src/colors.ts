@@ -17,3 +17,6 @@ export function friendAccent(index: number): string {
     ((index % FRIEND_ACCENTS.length) + FRIEND_ACCENTS.length) % FRIEND_ACCENTS.length
   ]!;
 }
+
+/** Ink for text/icons sitting on any friend accent — always dark, never white. */
+export const FRIEND_ACCENT_INK = '#17103A';

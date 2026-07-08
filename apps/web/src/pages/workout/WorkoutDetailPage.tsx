@@ -10,6 +10,7 @@ import {
   Pencil,
   Play,
   Repeat2,
+  Share2,
   Trash2,
   Users,
 } from 'lucide-react';
@@ -18,6 +19,7 @@ import { Link, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
 import { EmptyState } from '@/components/app/EmptyState';
 import { RescheduleSheet } from '@/components/app/RescheduleSheet';
+import { ShareSheet } from '@/components/app/ShareSheet';
 import { StatusBadge } from '@/components/app/StatusBadge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -94,6 +96,7 @@ export default function WorkoutDetailPage() {
 
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: trpc.workouts.pathKey() });
 
@@ -179,6 +182,16 @@ export default function WorkoutDetailPage() {
           <ChevronLeft />
         </Button>
         <div className="flex-1" />
+        {own && (
+          <Button
+            variant="ghost"
+            size="icon-xl"
+            aria-label="Share workout"
+            onClick={() => setShareOpen(true)}
+          >
+            <Share2 className="text-muted-foreground" />
+          </Button>
+        )}
         <StatusBadge status={workout.status} />
       </header>
 
@@ -297,6 +310,13 @@ export default function WorkoutDetailPage() {
         workoutId={workout.id}
         open={rescheduleOpen}
         onOpenChange={setRescheduleOpen}
+      />
+
+      <ShareSheet
+        workoutId={workout.id}
+        isPrivate={workout.visibility === 'private'}
+        open={shareOpen}
+        onOpenChange={setShareOpen}
       />
 
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>

@@ -149,3 +149,29 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer components {
+  /* Log calendar day dots (FRONTEND.md §3.5): volt = completed, muted = planned */
+  .log-day-completed,
+  .log-day-planned {
+    position: relative;
+  }
+  .log-day-completed::after,
+  .log-day-planned::after {
+    content: '';
+    position: absolute;
+    bottom: 3px;
+    left: 50%;
+    translate: -50% 0;
+    width: 5px;
+    height: 5px;
+    border-radius: 9999px;
+    pointer-events: none;
+  }
+  .log-day-completed::after {
+    background: var(--primary);
+  }
+  .log-day-planned::after {
+    background: var(--muted-foreground);
+  }
+}

@@ -4,7 +4,7 @@ Root instructions for any agent working in this repo. This file loads on every m
 
 ## Project status
 
-Phases 0–2 complete plus the **full tRPC API surface** (API halves of Phases 3–5). **Phase 2.5 is deployed: prod is live at https://buddy-pass.com** (milestones 0–5 done; only §5 milestone-6 follow-ups remain) — next is the web UI. Plans of record: `plans/MVP.md` (decisions §2, schema §4, progress + delivery notes §9), `plans/API.md` (API contracts, auth tiers, wiring facts), and `plans/INFRA.md` (infra/deploy — grilled 2026-07-07). `plans/INIT.md` is the original brain-dump (history, not current design).
+**MVP complete end-to-end**: schema + API, prod deploy (**live at https://buddy-pass.com**; INFRA §5 milestone-6 follow-ups remain), and the **full web UI** (plans/WEB.md milestones 0–9, delivered 2026-07-07). Remaining: INFRA follow-ups (S3 image sync + `IMAGE_BASE_URL` flip), guest-cleanup job, deferrals in MVP §1 "Out". Plans of record: `plans/MVP.md` (decisions §2, schema §4, progress + delivery notes §9), `plans/API.md` (API contracts, auth tiers, wiring facts), `plans/INFRA.md` (infra/deploy), `plans/FRONTEND.md` (UX flows/screens) + `plans/WEB.md` (web implementation + delivery notes). `plans/INIT.md` is the original brain-dump (history, not current design).
 
 Monorepo: pnpm + Turborepo. `apps/api` (Fastify + tRPC on :3000), `apps/web` (Vite React SPA on :5173, Tailwind v4 + shadcn/ui), `packages/shared` (zod schemas/utils), `packages/db` (Drizzle schema in `src/schema/`, migrations, seed pipeline).
 
@@ -16,6 +16,15 @@ Monorepo: pnpm + Turborepo. `apps/api` (Fastify + tRPC on :3000), `apps/web` (Vi
 - `buildServer({ databaseUrl, ... })` is injectable; api integration tests boot it against a testcontainer and drive everything through `server.inject` (helpers in `src/test/harness.ts`)
 - tRPC mutations need `content-type: application/json` even with empty bodies; raw SQL fragments need explicit `mapWith` (drizzle decoders don't run on them)
 - Env: `BETTER_AUTH_SECRET` required in real deployments; `APP_ORIGIN` = public web origin used for minted `/s/` `/f/` URLs (see `.env.example`)
+
+## Web (`apps/web`)
+
+- Layout: `pages/<area>/` (screen-local modules colocated), `components/app/` (shared kit), `components/ui/` (shadcn, Base UI `render` prop for as-child), `context/Authentication/`, `lib/` (`api-types.ts` = `inferRouterOutputs`, `format.ts` = the only place display units happen — state stays kg/UTC)
+- tRPC via `useTRPC()` + `queryOptions`/`mutationOptions`; invalidate with `trpc.<router>.pathKey()`; error codes via `trpcErrorCode()` (FORBIDDEN vs NOT_FOUND get honest copy, ADR-0002)
+- React Compiler lint is on: `useWatch` not `form.watch`, destructure `useSortable`, no `Date.now()` in render-scoped closures
+- `button.tsx` carries custom `xl` (44px) / `workout` (56px) sizes — don't let `shadcn add --overwrite` clobber it; theme is dark-only (`<html class="dark">`, tokens in `index.css`)
+- better-auth 403s auth POSTs that carry a session cookie without an `Origin` header — scripted/curl tests must send one (browsers always do)
+- `pnpm db:images` fetches exercise images to `apps/web/public/exercise-images/` (gitignored); missing images fall back to initial tiles (`ExerciseImage`)
 
 ## Daily dev
 

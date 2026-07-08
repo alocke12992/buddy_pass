@@ -2,7 +2,7 @@
 
 > Refined from `INIT.md` via grilling session on 2026-07-06. INIT.md remains the original brain-dump; this is the source of truth for the MVP build.
 >
-> **Status:** Phases 0–1 complete (scaffold; schema + ingestion), plus the **full API surface** (plans/API.md — auth, onboarding, workouts, logging, friends, sharing, stats) built and integration-tested. See §9. Next: Phase 2.5 (deploy) or Phase 3 UI (builder + logging screens; their API is ready).
+> **Status:** MVP complete end-to-end — schema/API (plans/API.md), prod deploy (plans/INFRA.md, live at https://buddy-pass.com), and the full web UI (plans/WEB.md, milestones 0–9 delivered 2026-07-07). See §9. Remaining loose ends: INFRA §5 milestone-6 follow-ups (S3 image sync + IMAGE_BASE_URL flip), guest-cleanup job, and the §1 "Out" deferrals.
 
 **Vision:** "Multiplayer" workouts — create and share workouts with friends, track and compare progress, eventually work out together in real time. The share/clone loop is the growth engine: anyone can receive a workout link and start using it *without signing up*.
 
@@ -270,11 +270,11 @@ Create (from library or clone) → `planned` → Start (`in_progress`, `started_
 | 0     | ✅ done (`9abc71a`) | Scaffold: Turborepo + pnpm, tsconfig/eslint/prettier, docker compose, CI skeleton (lint/typecheck/test on PR)                                       |
 | 1     | ✅ done | `packages/db`: Drizzle schema (§4) + migrations; ingestion/seed pipeline (§6)                                                                       |
 | 2     | ✅ done | Auth: better-auth (email/password + anonymous) wired into Fastify + tRPC context; onboarding (stats/settings) — shipped as part of the API build (see notes below) |
-| 2.5   | —      | **Deploy early:** Terraform prod stack + deploy pipeline live with just auth + library browsing — derisks infra assumptions before features pile up. Plan of record: `plans/INFRA.md` |
-| 3     | API ✅ | Workout builder + logging: exercise picker (search/filter), sets/supersets, logging UX, history — **UI remains**; tRPC surface + tests shipped      |
-| 4     | API ✅ | Progress: volume-over-time, body-weight chart, profile stats — **UI remains**; tRPC surface + tests shipped                                         |
-| 5     | API ✅ | Social: friend links, friends list, visibility enforcement, share links + OG page, guest clone, merge-on-signup, link revocation — **UI remains**   |
-| 6     | —      | Polish: empty states, error handling, responsive pass, rate limiting (✅ done in API), guest-cleanup job                                            |
+| 2.5   | ✅ done | **Deploy early:** Terraform prod stack + deploy pipeline live — prod at https://buddy-pass.com (plans/INFRA.md; §5 milestone-6 follow-ups remain)   |
+| 3     | ✅ done | Workout builder + logging: exercise picker (search/filter), sets/supersets, logging UX, history — API + UI (plans/WEB.md M4–M6)                     |
+| 4     | ✅ done | Progress: volume-over-time, body-weight chart, profile stats — API + UI (plans/WEB.md M7)                                                           |
+| 5     | ✅ done | Social: friend links, friends list, visibility enforcement, share links + OG page, guest clone, merge-on-signup, link revocation — API + UI (plans/WEB.md M8) |
+| 6     | ✅ done* | Polish: empty states, error handling, responsive pass, rate limiting — done (plans/WEB.md M9); *guest-cleanup job still to build                   |
 
 Then fast-follow #1 (generation) gets its own planning round.
 
@@ -306,3 +306,7 @@ Plan of record: `plans/API.md` (§3 has the wiring facts). Everything in that pl
 - Gotchas recorded for later phases: consume drizzle operators via `@buddy-pass/db` re-exports (a second peer-resolved drizzle-orm instance breaks type identity); raw SQL fragments bypass drizzle's decoders (map `date_trunc` etc. with `mapWith`); tRPC mutations require `content-type: application/json` even with empty bodies (415 otherwise)
 - Prod-parity smoke test surfaced two packaging fixes: `pg` is CJS and cannot be bundled into the ESM api build (tsup `external: ['pg']` + direct api dependency so `pnpm deploy` links it); the web image must copy `packages/db` since web's `tsc -b` follows `AppRouter` types into api source. Full `--profile full` stack verified through Caddy on :8080 (health, ping, OG share page, anonymous session → `profile.get`)
 - Post-review adjustments (same day): Fastify `trustProxy: true` — the api always sits behind Caddy/Vite proxy, and without it `req.ip` is the proxy's address, collapsing every user into one rate-limit bucket (and better-auth would log proxy IPs); friendship `created_at` carried through the guest merge so `friendsSince` survives signup; OG description pluralizes its exercise count
+
+### Web UI delivery notes (2026-07-07)
+
+Plan of record: `plans/WEB.md` (milestones 0–9, all delivered same day; delivery notes there). Every FRONTEND.md screen/flow shipped except the recorded deferrals (§1 "Out"): friends feed, goal ring/streak, delete account, plus two small api gaps flagged in WEB.md (visibility edit on completed workouts, pre-accept friend-link resolve). Flows F1–F7 verified end-to-end through the Vite proxy; prod-parity `--profile full` smoke green (health, superjson ping, OG bounce, anonymous session via Caddy).

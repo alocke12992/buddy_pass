@@ -14,6 +14,7 @@ Monorepo: pnpm + Turborepo. `apps/api` (Fastify + tRPC on :3000), `apps/web` (Vi
 - better-auth 1.6 at `/api/auth/*` (email/password + anonymous; `onLinkAccount` merges guest data via `services/merge.ts`); session resolved once per request into tRPC context
 - Import drizzle operators (`eq`, `and`, `sql`, ...) from `@buddy-pass/db`, never from `drizzle-orm` directly — a second peer-resolved drizzle instance breaks type identity in the api
 - `buildServer({ databaseUrl, ... })` is injectable; api integration tests boot it against a testcontainer and drive everything through `server.inject` (helpers in `src/test/harness.ts`)
+- The prod image includes the pinned exercise data + one-off `node dist/seed.js`; deploys run migrations but do not seed automatically
 - tRPC mutations need `content-type: application/json` even with empty bodies; raw SQL fragments need explicit `mapWith` (drizzle decoders don't run on them)
 - Env: `BETTER_AUTH_SECRET` required in real deployments; `APP_ORIGIN` = public web origin used for minted `/s/` `/f/` URLs (see `.env.example`)
 

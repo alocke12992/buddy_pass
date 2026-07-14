@@ -25,8 +25,8 @@ function chunks<T>(rows: T[], size: number): T[][] {
  * Idempotent library seed: upserts equipments + muscle_groups + exercises,
  * rebuilds the exercise_muscles join (library-owned, no user data references it).
  */
-export async function seedLibrary(db: Database) {
-  const raw = JSON.parse(await readFile(DATA_FILE, 'utf8'));
+export async function seedLibrary(db: Database, dataFile = DATA_FILE) {
+  const raw = JSON.parse(await readFile(dataFile, 'utf8'));
   const source = sourceFileSchema.parse(raw);
 
   await db

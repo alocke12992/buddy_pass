@@ -118,7 +118,7 @@ Secrets in GH Actions: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` only; region
 | 3 ✅ | VPC + RDS + S3 | RDS endpoint resolves to a private IP (10.0.x.x), unreachable from the internet; bucket spot-check: `exercises/*` public 200, other paths 403 ✓ (2026-07-07) |
 | 4 ✅ | EC2 + instance role + SSM params + Route53 zone/records + health-check alarm + `deploy.sh`; api image migration entrypoint | `deploy.sh d110b18` via SSM: ECR login → .env from SSM → migrations vs RDS → up → healthy in 3s; `https://buddy-pass.com/health` 200 with valid TLS, HTTP→HTTPS 308, SPA 200, `/trpc/ping` pongs ✓ (2026-07-07). Gotcha found: RDS forces TLS — `sslmode=require` + RDS CA bundle via `NODE_EXTRA_CA_CERTS` |
 | 5 ✅ | `deploy.yml` (push-to-main + `workflow_dispatch` sha) | Push → CI → auto-deploy of `efd3d76` green in 2m52s (native ARM runners); dispatched sha `7e8bf11` → box observed running that tag (rollback works) ✓ (2026-07-07) |
-| 6 | Follow-ups | S3 image sync for the exercise library (deferred MVP §6.4 item) + `IMAGE_BASE_URL` flip (key-rotation note landed in AGENTS.md with milestone 5) |
+| 6 ✅ | Follow-ups | All 1,746 pinned exercise images synced to S3, public delivery verified, and prod `VITE_IMAGE_BASE_URL` wired into web image builds via the GitHub Actions variable `IMAGE_BASE_URL` ✓ (2026-07-13; key-rotation note landed in AGENTS.md with milestone 5) |
 
 ---
 

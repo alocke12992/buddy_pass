@@ -15,7 +15,8 @@ COPY packages/shared packages/shared
 COPY packages/db packages/db
 COPY apps/api apps/api
 COPY apps/web apps/web
-RUN pnpm --filter @buddy-pass/web build
+ARG VITE_IMAGE_BASE_URL=/exercise-images
+RUN VITE_IMAGE_BASE_URL="$VITE_IMAGE_BASE_URL" pnpm --filter @buddy-pass/web build
 
 # Caddy serves the static SPA and proxies API paths — same shape locally and in prod
 FROM caddy:2-alpine AS runtime

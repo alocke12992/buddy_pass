@@ -2,7 +2,7 @@
 
 > Refined from `INIT.md` via grilling session on 2026-07-06. INIT.md remains the original brain-dump; this is the source of truth for the MVP build.
 >
-> **Status:** MVP complete end-to-end — schema/API (plans/API.md), prod deploy (plans/INFRA.md, live at https://buddy-pass.com), and the full web UI (plans/WEB.md, milestones 0–9 delivered 2026-07-07). See §9. Remaining loose ends: INFRA §5 milestone-6 follow-ups (S3 image sync + IMAGE_BASE_URL flip), guest-cleanup job, and the §1 "Out" deferrals.
+> **Status:** MVP complete end-to-end — schema/API (plans/API.md), prod deploy including S3 exercise images (plans/INFRA.md, milestones 0–6; live at https://buddy-pass.com), and the full web UI (plans/WEB.md, milestones 0–9 delivered 2026-07-07). See §9. Remaining loose ends: guest-cleanup job and the §1 "Out" deferrals.
 
 **Vision:** "Multiplayer" workouts — create and share workouts with friends, track and compare progress, eventually work out together in real time. The share/clone loop is the growth engine: anyone can receive a workout link and start using it *without signing up*.
 
@@ -219,7 +219,7 @@ Create (from library or clone) → `planned` → Start (`in_progress`, `started_
 1. ✅ `data/exercises.json` vendored, pinned at commit `5197c05` (873 exercises; sha256 recorded in `src/seed/library.ts`; dir is prettier-ignored to stay byte-identical)
 2. ✅ `seedLibrary()`: upserts `equipments` (12, with coarse `type`: free_weight/machine/accessory/bodyweight/other) + `muscle_groups` (17); zod-validates the vendored file against the source contract (`src/seed/source-schema.ts`) so vocab drift fails loudly
 3. ✅ Upserts `exercises` keyed by `slug` (chunked, `onConflictDoUpdate`); rebuilds `exercise_muscles` wholesale (2,583 rows) so source removals propagate
-4. Sync images to S3 (`exercises/<slug>/<n>.jpg`) — **deferred to Phase 2.5** (no bucket yet); DB already stores relative paths; base URL from env (`IMAGE_BASE_URL`): local dev = static folder or dev bucket, prod = S3 (CloudFront later)
+4. ✅ Synced all 1,746 pinned images to S3 (`exercises/<slug>/<n>.jpg`) on 2026-07-13; DB stores relative paths; local dev defaults to the static folder and the prod Vite build receives `VITE_IMAGE_BASE_URL` (CloudFront later)
 5. ✅ Nulls in source `force`/`mechanic`/`equipment` stay null — future generator excludes unlabeled exercises from push/pull selection rather than guessing
 6. ✅ Idempotent: `pnpm db:seed` (library + demo) / `db:seed:library` (library only); demo data (demo user + friend, settings/stats/measurements, 1 completed push workout, 1 planned pull workout with share link `demoshare123`) skips itself if present
 
@@ -270,7 +270,7 @@ Create (from library or clone) → `planned` → Start (`in_progress`, `started_
 | 0     | ✅ done (`9abc71a`) | Scaffold: Turborepo + pnpm, tsconfig/eslint/prettier, docker compose, CI skeleton (lint/typecheck/test on PR)                                       |
 | 1     | ✅ done | `packages/db`: Drizzle schema (§4) + migrations; ingestion/seed pipeline (§6)                                                                       |
 | 2     | ✅ done | Auth: better-auth (email/password + anonymous) wired into Fastify + tRPC context; onboarding (stats/settings) — shipped as part of the API build (see notes below) |
-| 2.5   | ✅ done | **Deploy early:** Terraform prod stack + deploy pipeline live — prod at https://buddy-pass.com (plans/INFRA.md; §5 milestone-6 follow-ups remain)   |
+| 2.5   | ✅ done | **Deploy early:** Terraform prod stack + deploy pipeline live — prod at https://buddy-pass.com, including S3 exercise images (plans/INFRA.md)   |
 | 3     | ✅ done | Workout builder + logging: exercise picker (search/filter), sets/supersets, logging UX, history — API + UI (plans/WEB.md M4–M6)                     |
 | 4     | ✅ done | Progress: volume-over-time, body-weight chart, profile stats — API + UI (plans/WEB.md M7)                                                           |
 | 5     | ✅ done | Social: friend links, friends list, visibility enforcement, share links + OG page, guest clone, merge-on-signup, link revocation — API + UI (plans/WEB.md M8) |

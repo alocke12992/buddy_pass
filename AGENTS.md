@@ -4,7 +4,7 @@ Root instructions for any agent working in this repo. This file loads on every m
 
 ## Project status
 
-**MVP complete end-to-end**: schema + API, prod deploy (**live at https://buddy-pass.com**; INFRA §5 milestone-6 follow-ups remain), and the **full web UI** (plans/WEB.md milestones 0–9, delivered 2026-07-07). Remaining: INFRA follow-ups (S3 image sync + `IMAGE_BASE_URL` flip), guest-cleanup job, deferrals in MVP §1 "Out". Plans of record: `plans/MVP.md` (decisions §2, schema §4, progress + delivery notes §9), `plans/API.md` (API contracts, auth tiers, wiring facts), `plans/INFRA.md` (infra/deploy), `plans/FRONTEND.md` (UX flows/screens) + `plans/WEB.md` (web implementation + delivery notes). `plans/INIT.md` is the original brain-dump (history, not current design).
+**MVP complete end-to-end**: schema + API, prod deploy (**live at https://buddy-pass.com**; INFRA §5 milestones 0–6 complete), and the **full web UI** (plans/WEB.md milestones 0–9, delivered 2026-07-07). All 1,746 exercise images are served from S3 in production builds via `VITE_IMAGE_BASE_URL`. Remaining: guest-cleanup job and deferrals in MVP §1 "Out". Plans of record: `plans/MVP.md` (decisions §2, schema §4, progress + delivery notes §9), `plans/API.md` (API contracts, auth tiers, wiring facts), `plans/INFRA.md` (infra/deploy), `plans/FRONTEND.md` (UX flows/screens) + `plans/WEB.md` (web implementation + delivery notes). `plans/INIT.md` is the original brain-dump (history, not current design).
 
 Monorepo: pnpm + Turborepo. `apps/api` (Fastify + tRPC on :3000), `apps/web` (Vite React SPA on :5173, Tailwind v4 + shadcn/ui), `packages/shared` (zod schemas/utils), `packages/db` (Drizzle schema in `src/schema/`, migrations, seed pipeline).
 

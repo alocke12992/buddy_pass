@@ -69,6 +69,8 @@ jobs:
           file: apps/web/Dockerfile
           platforms: linux/arm64
           push: true
+          build-args: |
+            VITE_IMAGE_BASE_URL=${{ vars.IMAGE_BASE_URL }}
           tags: |
             ${{ vars.ECR_REGISTRY }}/buddypass-prod/web:${{ steps.tag.outputs.tag }}
             ${{ vars.ECR_REGISTRY }}/buddypass-prod/web:latest

@@ -31,7 +31,7 @@ import { PickerSheet } from './exercises/PickerSheet';
 import { ReplaceSheet } from './exercises/ReplaceSheet';
 import { LiveSetRow } from './live/LiveSetRow';
 import {
-  activeExercises,
+  livePlan,
   buildDisplayGroups,
   countSets,
   currentSetId,
@@ -62,6 +62,8 @@ type SetPatch = Partial<{
   weightKg: number;
   completedAt: Date | null;
 }>;
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 /** The design-target screen (FRONTEND.md §3.3): full-screen, no tab bar. */
 export default function LivePage() {
@@ -197,11 +199,12 @@ export default function LivePage() {
 
   const addExercises = useMutation(
     trpc.logging.addExercises.mutationOptions({
-      onSuccess: (next, vars) => {
+      onSuccess: (next) => {
+        // count from the document: the server skips ids already in the plan
+        const before = queryClient.getQueryData<WorkoutDoc>(queryKey)?.exercises.length ?? 0;
         seedDoc(next);
-        toast(
-          `Added ${vars.exerciseIds.length === 1 ? '1 exercise' : `${vars.exerciseIds.length} exercises`}`,
-        );
+        const added = next.exercises.length - before;
+        if (added > 0) toast(`Added ${plural(added, 'exercise')}`);
       },
       onError: (e) => toast.error(e.message || "Couldn't add the exercises"),
     }),
@@ -264,7 +267,7 @@ export default function LivePage() {
 
   // Dropped exercises stay in the document but off the live plan (ADR-0004);
   // their completed sets still count in the header total.
-  const plan = activeExercises(doc.data);
+  const plan = livePlan(doc.data);
   const planIds = new Set(plan.map((e) => e.exercise.id));
   const groups = buildDisplayGroups(plan);
   const activeSetId = currentSetId(groups);
@@ -310,30 +313,26 @@ export default function LivePage() {
     setStaged([]);
   };
 
+  /** Sets already logged in a slot survive it being dropped — say so, or the user assumes they didn't. */
+  const keptNote = (slot: DocExercise) => {
+    const logged = slot.sets.filter((s) => s.completedAt !== null).length;
+    return logged > 0 ? ` — ${plural(logged, 'logged set')} stay on your record` : '';
+  };
+
   const doReplace = (slot: DocExercise, entry: ExerciseIndexEntry) => {
     setReplaceId(null);
     setReplaceSearch(null);
-    const from = slot.exercise.name;
+    const message = `Swapped ${slot.exercise.name} → ${entry.name}${keptNote(slot)}`;
     replaceExercise.mutate(
       { workoutExerciseId: slot.id, exerciseId: entry.id },
-      { onSuccess: () => toast(`Swapped ${from} → ${entry.name}`) },
+      { onSuccess: () => toast(message) },
     );
   };
 
   const doRemove = (slot: DocExercise) => {
     setExerciseMenuId(null);
-    const logged = slot.sets.filter((s) => s.completedAt !== null).length;
-    removeExercise.mutate(
-      { workoutExerciseId: slot.id },
-      {
-        onSuccess: () =>
-          toast(
-            logged > 0
-              ? `Removed ${slot.exercise.name} — ${logged} logged set${logged === 1 ? '' : 's'} stay on your record`
-              : `Removed ${slot.exercise.name}`,
-          ),
-      },
-    );
+    const message = `Removed ${slot.exercise.name}${keptNote(slot)}`;
+    removeExercise.mutate({ workoutExerciseId: slot.id }, { onSuccess: () => toast(message) });
   };
 
   // All sets done → no confirmation needed (FRONTEND.md §3.3)
@@ -432,7 +431,7 @@ export default function LivePage() {
                 </Button>
                 <Button
                   variant="ghost"
-                  size="icon-lg"
+                  size="icon-xl"
                   aria-label={`Options for ${e.exercise.name}`}
                   onClick={() => setExerciseMenuId(e.id)}
                 >
@@ -531,11 +530,7 @@ export default function LivePage() {
                 : [...current, entry],
             )
           }
-          doneLabel={
-            staged.length > 0
-              ? `Add ${staged.length} exercise${staged.length === 1 ? '' : 's'}`
-              : 'Done'
-          }
+          doneLabel={staged.length > 0 ? `Add ${plural(staged.length, 'exercise')}` : 'Done'}
           onDone={() => {
             if (staged.length > 0) {
               addExercises.mutate({ workoutId: id, exerciseIds: staged.map((e) => e.id) });

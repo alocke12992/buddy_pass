@@ -758,6 +758,55 @@ describe('mid-workout structure edits', () => {
     expect(replacement!.droppedAt).toBeNull();
   });
 
+  it('drops a superset member out of its group, so it never brackets with its replacement', async () => {
+    const groupId = '0195c2f0-2222-7000-8000-000000000000';
+    const live = await startWorkout('Grouped Swap', [exerciseIds[4]!, exerciseIds[5]!], groupId);
+    const target = live.exercises[0]!;
+    await trpcMutation(
+      app.server,
+      'logging.completeSet',
+      { setId: target.sets[0]!.id },
+      alice.cookie,
+    );
+
+    const res = await trpcMutation<WorkoutDoc>(
+      app.server,
+      'logging.replaceExercise',
+      { workoutExerciseId: target.id, exerciseId: exerciseIds[2]! },
+      alice.cookie,
+    );
+    const [dropped, replacement] = res.data.exercises;
+    expect(dropped!.droppedAt).toBeInstanceOf(Date);
+    expect(dropped!.superSetId).toBeNull(); // grouping is a plan concept
+    expect(replacement!.superSetId).toBe(groupId);
+  });
+
+  it('clones the plan as performed — a dropped slot is not copied forward', async () => {
+    const live = await startWorkout('Cloneable', [exerciseIds[8]!, exerciseIds[9]!]);
+    await trpcMutation(
+      app.server,
+      'logging.completeSet',
+      { setId: live.exercises[0]!.sets[0]!.id },
+      alice.cookie,
+    );
+    await trpcMutation(
+      app.server,
+      'logging.removeExercise',
+      { workoutExerciseId: live.exercises[0]!.id },
+      alice.cookie,
+    );
+    await trpcMutation(app.server, 'logging.finish', { workoutId: live.id }, alice.cookie);
+
+    const cloned = await trpcMutation<WorkoutDoc>(
+      app.server,
+      'workouts.clone',
+      { source: { workoutId: live.id } },
+      alice.cookie,
+    );
+    expect(cloned.data.exercises.map((e) => e.exercise.id)).toEqual([exerciseIds[9]]);
+    expect(cloned.data.exercises[0]!.position).toBe(0);
+  });
+
   it('still counts a dropped slot toward volume once the workout is completed', async () => {
     const before = await trpcQuery<{ totalVolumeKg: number }>(
       app.server,

@@ -1,12 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { WorkoutDoc } from '@/lib/api-types';
-import {
-  activeExercises,
-  buildDisplayGroups,
-  completedVolumeKg,
-  countSets,
-  currentSetId,
-} from './order';
+import { livePlan, buildDisplayGroups, completedVolumeKg, countSets, currentSetId } from './order';
 
 const set = (
   id: string,
@@ -80,18 +74,18 @@ describe('buildDisplayGroups', () => {
   });
 });
 
-describe('activeExercises', () => {
-  it('hides dropped exercises from the live plan', () => {
+describe('livePlan', () => {
+  it('hides dropped exercises from a session in progress', () => {
     const d = doc([
       exercise('A', null, [set('a1')]),
       exercise('B', null, [set('b1', { completedAt: new Date() })], new Date()),
     ]);
-    expect(activeExercises(d).map((e) => e.id)).toEqual(['A']);
+    expect(livePlan(d).map((e) => e.id)).toEqual(['A']);
   });
 
   it('dissolves a superset when dropping leaves one member', () => {
     const d = doc([exercise('A', 'ss', [set('a1')], new Date()), exercise('B', 'ss', [set('b1')])]);
-    const groups = buildDisplayGroups(activeExercises(d));
+    const groups = buildDisplayGroups(livePlan(d));
     expect(groups).toHaveLength(1);
     expect(groups[0]!.isSuperset).toBe(false);
   });

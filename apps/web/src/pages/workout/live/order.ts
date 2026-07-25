@@ -23,9 +23,9 @@ export interface DisplayGroup {
 /**
  * The live plan: what's still to be done. Dropped exercises (removed or swapped
  * out mid-workout, ADR-0004) survive only as a record of the sets completed in
- * them, so they belong to the finished workout — never to the live screen.
+ * them, so they belong to the finished workout — never to a session in progress.
  */
-export function activeExercises(doc: WorkoutDoc): DocExercise[] {
+export function livePlan(doc: WorkoutDoc): DocExercise[] {
   return doc.exercises.filter((e) => e.droppedAt === null);
 }
 

@@ -57,7 +57,13 @@ async function loadLiveWorkout(db: Database, userId: string, workoutId: string) 
   return assertLive(row, userId);
 }
 
-/** A slot in the live plan. Dropped slots are frozen records — never editable again. */
+/** Dropped slots are frozen records of work done — nothing mutates them again. */
+function assertNotDropped(slot: typeof workoutExercises.$inferSelect) {
+  if (slot.droppedAt !== null) {
+    throw new TRPCError({ code: 'BAD_REQUEST', message: 'Exercise is no longer in this workout' });
+  }
+}
+
 async function loadLiveExercise(db: Database, userId: string, workoutExerciseId: string) {
   const [row] = await db
     .select({ slot: workoutExercises, workout: workouts })
@@ -66,9 +72,7 @@ async function loadLiveExercise(db: Database, userId: string, workoutExerciseId:
     .where(eq(workoutExercises.id, workoutExerciseId));
   if (!row) throw new TRPCError({ code: 'NOT_FOUND' });
   assertLive(row.workout, userId);
-  if (row.slot.droppedAt !== null) {
-    throw new TRPCError({ code: 'BAD_REQUEST', message: 'Exercise is no longer in this workout' });
-  }
+  assertNotDropped(row.slot);
   return row.slot;
 }
 
@@ -82,9 +86,7 @@ async function loadMutableSet(db: Database, userId: string, setId: string) {
     .where(eq(workoutSets.id, setId));
   if (!row) throw new TRPCError({ code: 'NOT_FOUND' });
   assertLive(row.workout, userId);
-  if (row.slot.droppedAt !== null) {
-    throw new TRPCError({ code: 'BAD_REQUEST', message: 'Exercise is no longer in this workout' });
-  }
+  assertNotDropped(row.slot);
   return row.set;
 }
 

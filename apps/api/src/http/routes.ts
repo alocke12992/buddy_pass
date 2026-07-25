@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { Database } from '@buddy-pass/db';
-import { resolveShareToken } from '../services/sharing';
+import { resolveShareToken, toSharedWorkoutView } from '../services/sharing';
 
 const escapeHtml = (s: string) =>
   s
@@ -48,7 +48,8 @@ export function registerHttpRoutes(server: FastifyInstance, deps: { db: Database
       const redirectTo = `/share/${encodeURIComponent(token)}`;
       const resolution = await resolveShareToken(deps.db, token);
 
-      const count = resolution.ok ? resolution.workout.exerciseCount : 0;
+      // the shared view's count, so the preview and the OG blurb agree
+      const count = resolution.ok ? toSharedWorkoutView(resolution.workout).exerciseCount : 0;
       const html = resolution.ok
         ? ogPage({
             title: `${resolution.workout.name} — Buddy Pass`,

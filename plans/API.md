@@ -160,8 +160,9 @@ Small, single-purpose mutations designed for optimistic updates — and shaped l
 | `logging.removeExercise` | `authed` | `{ workoutExerciseId } → WorkoutDoc` — takes the slot off the live plan |
 
 - Illegal transitions (`start` on `completed`, `completeSet` on a workout not `in_progress`) → `BAD_REQUEST`
-- **Dropping** (ADR-0004) is what `removeExercise`/`replaceExercise` do to the old slot: unfinished sets are deleted, then the slot is stamped `dropped_at` if any set was completed (kept for the record, hidden from the live screen, still counted by stats) or deleted outright if none was. Dropped slots are frozen — set and structure mutations on them → `BAD_REQUEST`
+- **Dropping** (ADR-0004) is what `removeExercise`/`replaceExercise` do to the old slot: unfinished sets are deleted, then the slot is stamped `dropped_at` (and its `super_set_id` cleared — grouping is a plan concept) if any set was completed, or deleted outright if none was. Dropped slots are frozen — set and structure mutations on them → `BAD_REQUEST`
 - Structure mutations return the whole `WorkoutDoc` (ids the client can't predict); `WorkoutDoc.exercises[]` carries `droppedAt`, ordered by `position, id` so a dropped slot precedes its replacement
+- A dropped slot is a record, not a plan: `cloneWorkout` and `toSharedWorkoutView` (§2.6) both skip them, so repeating or cloning never resurrects a swapped-out exercise. Stats and the doc's own `exerciseCount`/`setCount` do count them — the work happened
 - No set removal mid-workout in MVP (uncompleted leftovers are simply ignored by stats); no server-enforced "single active workout" — UI concern
 - `planned` workouts are discarded via `workouts.delete`, not `cancel`
 

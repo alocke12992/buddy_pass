@@ -39,11 +39,11 @@ import type { WorkoutDoc } from '@/lib/api-types';
 import { formatDuration, formatWeight } from '@/lib/format';
 import { trpcErrorCode, useTRPC } from '@/lib/trpc';
 import { cn } from '@/lib/utils';
-import { buildDisplayGroups, completedVolumeKg, countSets } from './live/order';
+import { buildDisplayGroups, completedVolumeKg, countSets, livePlan } from './live/order';
 
 function ExerciseList({ doc, unit }: { doc: WorkoutDoc; unit: UnitPreference }) {
-  // Dropped exercises are part of the record, so this view keeps them (ADR-0004)
-  const groups = buildDisplayGroups(doc.exercises);
+  // Dropped exercises join the record only once the session is over (ADR-0004)
+  const groups = buildDisplayGroups(doc.status === 'in_progress' ? livePlan(doc) : doc.exercises);
   const showChecks = doc.status === 'completed' || doc.status === 'cancelled';
   return (
     <div className="space-y-4">

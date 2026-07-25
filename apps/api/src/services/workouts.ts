@@ -189,7 +189,7 @@ const defaultSetTemplates = (): SetTemplate[] =>
  * How an exercise added mid-workout gets its numbers: whatever the user actually
  * completed the last time they did it, falling back to the builder's defaults.
  */
-export async function lastPerformedSets(
+async function lastPerformedSets(
   db: DbOrTx,
   opts: { userId: string; exerciseId: string },
 ): Promise<SetTemplate[]> {
@@ -257,7 +257,9 @@ async function insertLiveExercise(
 /**
  * Take a slot off the live plan. Its unfinished sets were only ever a plan, so
  * they go; anything completed is a record of work done, so the slot survives
- * as *dropped* instead of being erased.
+ * as *dropped* instead of being erased. Superset membership is a plan concept,
+ * so it's cleared — otherwise a dropped slot would still bracket with the
+ * exercise that replaced it.
  */
 async function dropOrEraseExercise(tx: DbOrTx, workoutExerciseId: string) {
   await tx
@@ -275,7 +277,7 @@ async function dropOrEraseExercise(tx: DbOrTx, workoutExerciseId: string) {
   }
   await tx
     .update(workoutExercises)
-    .set({ droppedAt: new Date() })
+    .set({ droppedAt: new Date(), superSetId: null })
     .where(eq(workoutExercises.id, workoutExerciseId));
 }
 
@@ -363,7 +365,10 @@ export async function cloneWorkout(
       where: eq(workouts.id, opts.sourceId),
       with: {
         exercises: {
-          orderBy: [asc(workoutExercises.position)],
+          // A clone is the plan as performed: dropped slots were swapped out or
+          // removed, so copying them would resurrect them beside their replacement
+          where: isNull(workoutExercises.droppedAt),
+          orderBy: [asc(workoutExercises.position), asc(workoutExercises.id)],
           with: { sets: { orderBy: [asc(workoutSets.position)] } },
         },
       },
@@ -386,10 +391,11 @@ export async function cloneWorkout(
       const weRows = await tx
         .insert(workoutExercises)
         .values(
-          source.exercises.map((we) => ({
+          // renumbered: filtering dropped slots can leave gaps in the source's positions
+          source.exercises.map((we, position) => ({
             workoutId: created!.id,
             exerciseId: we.exerciseId,
-            position: we.position,
+            position,
             superSetId: we.superSetId,
           })),
         )

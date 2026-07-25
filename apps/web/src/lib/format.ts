@@ -1,4 +1,4 @@
-import { kgToLb, type UnitPreference } from '@buddy-pass/shared';
+import { kgToLb, lbToKg, roundToIncrement, type UnitPreference } from '@buddy-pass/shared';
 
 /**
  * All display formatting lives here: state is kg/UTC canonical everywhere,
@@ -17,6 +17,30 @@ export function displayWeight(weightKg: number, unit: UnitPreference): number {
 
 export function formatWeight(weightKg: number, unit: UnitPreference): string {
   return `${displayWeight(weightKg, unit)} ${weightUnitLabel(unit)}`;
+}
+
+/** One tap of a weight stepper, in the user's own units. */
+const WEIGHT_STEP = { metric: 2.5, imperial: 5 } as const;
+
+/**
+ * The weight one stepper tap away.
+ *
+ * Imperial has to be quantized on the lb grid the user actually sees: 5 lb is
+ * 2.26796185 kg, so accumulating the step in kg loses up to 0.005 kg to storage
+ * precision every tap until the error surfaces as `60.1 lb` (BUD-7). Snapping
+ * discards that error each tap instead of compounding it.
+ *
+ * Metric needs none of that — 2.5 kg is exact at storage precision — so it keeps
+ * a plain delta and a deliberate 20.5 kg stays 20.5.
+ */
+export function steppedWeightKg(weightKg: number, direction: 1 | -1, unit: UnitPreference): number {
+  const step = WEIGHT_STEP[unit];
+  const next =
+    unit === 'metric'
+      ? weightKg + direction * step
+      : lbToKg(roundToIncrement(kgToLb(weightKg), step) + direction * step);
+  // Clamp, then round to the 2 dp `workout_sets.weight_kg` (numeric(6, 2)) holds.
+  return Math.max(0, Math.round(next * 100) / 100);
 }
 
 /** "Today" / "Tomorrow" / "Mon, Jul 13" schedule chips. */

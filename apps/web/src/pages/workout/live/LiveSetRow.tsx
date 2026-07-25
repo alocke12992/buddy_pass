@@ -1,13 +1,8 @@
-import { lbToKg, type UnitPreference } from '@buddy-pass/shared';
+import type { UnitPreference } from '@buddy-pass/shared';
 import { Check, Minus, Plus } from 'lucide-react';
 import { displayWeight, weightUnitLabel } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { DisplayRow } from './order';
-
-/** Weight steps in the user's units: 2.5 kg or 5 lb per tap. */
-function weightStepKg(unit: UnitPreference): number {
-  return unit === 'metric' ? 2.5 : lbToKg(5);
-}
 
 function Stepper({
   value,
@@ -74,7 +69,7 @@ export function LiveSetRow({
   unit,
   editable,
   onDeltaReps,
-  onDeltaWeight,
+  onStepWeight,
   onToggleComplete,
 }: {
   row: DisplayRow;
@@ -84,7 +79,8 @@ export function LiveSetRow({
   unit: UnitPreference;
   editable: boolean;
   onDeltaReps: (deltaReps: number) => void;
-  onDeltaWeight: (deltaKg: number) => void;
+  /** One tap up or down; the caller decides what the next weight is. */
+  onStepWeight: (direction: 1 | -1) => void;
   onToggleComplete: () => void;
 }) {
   const completed = row.set.completedAt !== null;
@@ -149,7 +145,7 @@ export function LiveSetRow({
             <Stepper
               value={String(weightValue)}
               suffix={weightUnitLabel(unit)}
-              onDelta={(d) => onDeltaWeight(d * weightStepKg(unit))}
+              onDelta={onStepWeight}
               decLabel="Lower weight"
               incLabel="Raise weight"
               size={isCurrent ? 'current' : 'compact'}

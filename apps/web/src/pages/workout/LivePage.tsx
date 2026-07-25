@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { ExerciseIndexEntry, WorkoutDoc } from '@/lib/api-types';
-import { formatDuration } from '@/lib/format';
+import { formatDuration, steppedWeightKg } from '@/lib/format';
 import { useTRPC } from '@/lib/trpc';
 import { cn } from '@/lib/utils';
 import { ExerciseMenuSheet } from './exercises/ExerciseMenuSheet';
@@ -398,12 +398,9 @@ export default function LivePage() {
                   unit={unit}
                   editable
                   onDeltaReps={(d) => editSet(row.set.id, { reps: Math.max(0, row.set.reps + d) })}
-                  onDeltaWeight={(dKg) =>
+                  onStepWeight={(direction) =>
                     editSet(row.set.id, {
-                      weightKg: Math.max(
-                        0,
-                        Math.round(((row.set.weightKg ?? 0) + dKg) * 100) / 100,
-                      ),
+                      weightKg: steppedWeightKg(row.set.weightKg ?? 0, direction, unit),
                     })
                   }
                   onToggleComplete={() =>

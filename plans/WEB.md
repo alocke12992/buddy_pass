@@ -99,7 +99,8 @@ Milestones land as individual commits/PRs in this order; 4→5 and 6→7 pairs m
 ## 5. Gotchas & constraints
 
 - **superjson Dates**: tRPC outputs carry real `Date` objects — never re-parse; format via `format.ts` only.
-- **Whole-doc builder writes** (ADR-0003): `workouts.update` is full-replace and `planned`-only. Reschedule = fetch doc → resubmit with new `scheduledFor`. Never attempt structure edits on an `in_progress` workout — only `logging.*` mutations are legal there.
+- **Whole-doc builder writes** (ADR-0003): `workouts.update` is full-replace and `planned`-only. Reschedule = fetch doc → resubmit with new `scheduledFor`. An `in_progress` workout is edited *only* through `logging.*` — including its exercise list (ADR-0004: `addExercises` / `replaceExercise` / `removeExercise`, which return the whole doc → `setQueryData`, no optimistic patch).
+- **Live plan vs. record** (ADR-0004): the live screen renders `activeExercises(doc)`; history/summary render `doc.exercises` so dropped ones show with a `DroppedBadge`. Set counts and volume always span the whole doc — work logged in a dropped exercise still counts.
 - **`exercises.list` is cached forever** (`staleTime: Infinity` per API.md) — all picker search/filtering is client-side; do not add server search.
 - **Guest tier walls** (ADR-0001): `isAnonymous` users never see mint-link UI (share sheet, invite sheet) — they get the signup CTA instead. Clone/accept/log all work for guests.
 - **Error-code UX** (ADR-0002): `FORBIDDEN` on links/workouts gets honest copy ("revoked", "private"), `NOT_FOUND` gets the dead-link screen — don't collapse them.
@@ -123,3 +124,10 @@ All milestones landed as individual commits (`7e8bf11` → M9), each gated on `p
   - recharts and the builder (dnd-kit) are code-split (`React.lazy` / route `lazy`); main bundle ~240 kB gz.
 - **API gaps flagged for a future backend pass** (worked around in UI): no visibility edit for non-`planned` workouts (ADR-0003 makes `workouts.update` planned-only) — detail shows a static badge; no pre-accept friend-link resolve — the `/friend/:token` consent screen uses generic copy instead of the inviter's name; per-row volume isn't in `WorkoutSummary` — Log rows show sets/exercises instead.
 - **Deferred per §2a** (recorded in MVP.md §1): friends feed, weekly goal + streak, account deletion. Password reset remains blocked on email infra (FRONTEND.md §3.14).
+
+## 7. Post-MVP: mid-workout plan edits (ADR-0004)
+
+The live screen can now reshape the workout: **Add exercises** (picker in multi-select — selection is staged locally and committed as one `logging.addExercises` call) and a per-exercise 3-dot menu → **Replace** (the builder's `ReplaceSheet` → suggestions, then the full picker) or **Remove**. No confirmation dialogs: nothing is destroyed, so a toast reports what happened ("Swapped X → Y", "Removed X — 2 logged sets stay on your record").
+
+- `PickerSheet` / `ReplaceSheet` / `ExerciseMenuSheet` / `ExerciseDetailSheet` / `replaceRanking` moved `builder/` → `pages/workout/exercises/` now that two screens share them. New props are additive: picker `onDone` + `doneLabel` + `lockedIds` (already in the workout, un-toggleable — removal lives in the 3-dot menu), menu's `onSuperset` is optional, `ReplaceSheet` takes `target` + `description` instead of a builder exercise.
+- `buildDisplayGroups` now takes an exercise list rather than the doc, so each screen picks its own: live = `activeExercises(doc)`, detail/summary = `doc.exercises`.

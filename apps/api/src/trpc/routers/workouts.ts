@@ -4,10 +4,10 @@ import {
   cloneWorkoutInputSchema,
   workoutInputSchema,
   workoutListInputSchema,
-  type WorkoutInput,
 } from '@buddy-pass/shared';
-import { eq, inArray, schema } from '@buddy-pass/db';
+import { eq, schema } from '@buddy-pass/db';
 import { canViewWorkout, requireUserScope } from '../../services/access';
+import { assertExercisesExist } from '../../services/exercises';
 import { resolveShareToken } from '../../services/sharing';
 import {
   cloneWorkout,
@@ -19,20 +19,7 @@ import {
 } from '../../services/workouts';
 import { authedProcedure, router } from '../trpc';
 
-const { workouts, exercises } = schema;
-
-/** FK violations read as 500s — surface unknown exercise ids as BAD_REQUEST instead. */
-async function assertExerciseIdsExist(db: DbOrTx, input: WorkoutInput) {
-  const ids = [...new Set(input.exercises.map((e) => e.exerciseId))];
-  if (ids.length === 0) return;
-  const found = await db
-    .select({ id: exercises.id })
-    .from(exercises)
-    .where(inArray(exercises.id, ids));
-  if (found.length !== ids.length) {
-    throw new TRPCError({ code: 'BAD_REQUEST', message: 'Unknown exercise id' });
-  }
-}
+const { workouts } = schema;
 
 async function loadWorkoutRow(db: DbOrTx, id: string) {
   const [row] = await db.select().from(workouts).where(eq(workouts.id, id));
@@ -64,7 +51,10 @@ export const workoutsRouter = router({
   }),
 
   create: authedProcedure.input(workoutInputSchema).mutation(async ({ ctx, input }) => {
-    await assertExerciseIdsExist(ctx.db, input);
+    await assertExercisesExist(
+      ctx.db,
+      input.exercises.map((e) => e.exerciseId),
+    );
     const visibility = input.visibility ?? (await defaultVisibilityFor(ctx.db, ctx.user.id));
     const id = await ctx.db.transaction(async (tx) => {
       const [created] = await tx
@@ -95,7 +85,10 @@ export const workoutsRouter = router({
           message: 'Only planned workouts can be edited',
         });
       }
-      await assertExerciseIdsExist(ctx.db, input);
+      await assertExercisesExist(
+        ctx.db,
+        input.exercises.map((e) => e.exerciseId),
+      );
       const visibility = input.visibility ?? (await defaultVisibilityFor(ctx.db, ctx.user.id));
       await ctx.db.transaction(async (tx) => {
         await tx

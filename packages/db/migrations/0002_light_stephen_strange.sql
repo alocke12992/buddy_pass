@@ -1,0 +1,1 @@
+ALTER TABLE "workout_exercises" ADD COLUMN "dropped_at" timestamp with time zone;

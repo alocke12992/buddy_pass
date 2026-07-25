@@ -20,6 +20,7 @@ export {
   isNull,
   lt,
   lte,
+  max,
   ne,
   or,
   sql,

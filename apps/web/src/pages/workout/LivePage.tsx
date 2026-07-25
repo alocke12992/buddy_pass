@@ -22,12 +22,21 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
-import type { WorkoutDoc } from '@/lib/api-types';
+import type { ExerciseIndexEntry, WorkoutDoc } from '@/lib/api-types';
 import { formatDuration } from '@/lib/format';
 import { useTRPC } from '@/lib/trpc';
 import { cn } from '@/lib/utils';
+import { ExerciseMenuSheet } from './exercises/ExerciseMenuSheet';
+import { PickerSheet } from './exercises/PickerSheet';
+import { ReplaceSheet } from './exercises/ReplaceSheet';
 import { LiveSetRow } from './live/LiveSetRow';
-import { buildDisplayGroups, countSets, currentSetId } from './live/order';
+import {
+  activeExercises,
+  buildDisplayGroups,
+  countSets,
+  currentSetId,
+  type DocExercise,
+} from './live/order';
 import {
   extendTimerNow,
   formatSeconds,
@@ -70,6 +79,15 @@ export default function LivePage() {
   const [finishOpen, setFinishOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
+  // Plan edits (ADR-0004), keyed by workout_exercise id
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [staged, setStaged] = useState<ExerciseIndexEntry[]>([]);
+  const [exerciseMenuId, setExerciseMenuId] = useState<string | null>(null);
+  const [replaceId, setReplaceId] = useState<string | null>(null);
+  const [replaceSearch, setReplaceSearch] = useState<{
+    id: string;
+    muscleGroupId: string | null;
+  } | null>(null);
 
   const profile = useQuery(trpc.profile.get.queryOptions());
   const unit: UnitPreference = profile.data?.settings?.unitPreference ?? 'metric';
@@ -174,6 +192,35 @@ export default function LivePage() {
     }),
   );
 
+  // Structure edits reshuffle ids, so the server's document replaces the cache wholesale
+  const seedDoc = (next: WorkoutDoc) => queryClient.setQueryData(queryKey, next);
+
+  const addExercises = useMutation(
+    trpc.logging.addExercises.mutationOptions({
+      onSuccess: (next, vars) => {
+        seedDoc(next);
+        toast(
+          `Added ${vars.exerciseIds.length === 1 ? '1 exercise' : `${vars.exerciseIds.length} exercises`}`,
+        );
+      },
+      onError: (e) => toast.error(e.message || "Couldn't add the exercises"),
+    }),
+  );
+
+  const replaceExercise = useMutation(
+    trpc.logging.replaceExercise.mutationOptions({
+      onSuccess: (next) => seedDoc(next),
+      onError: (e) => toast.error(e.message || "Couldn't swap the exercise"),
+    }),
+  );
+
+  const removeExercise = useMutation(
+    trpc.logging.removeExercise.mutationOptions({
+      onSuccess: (next) => seedDoc(next),
+      onError: (e) => toast.error(e.message || "Couldn't remove the exercise"),
+    }),
+  );
+
   const finish = useMutation(
     trpc.logging.finish.mutationOptions({
       onSuccess: async () => {
@@ -215,7 +262,11 @@ export default function LivePage() {
   if (doc.data.status === 'completed') return <Navigate to={`/workout/${id}/summary`} replace />;
   if (doc.data.status !== 'in_progress') return <Navigate to={`/workout/${id}`} replace />;
 
-  const groups = buildDisplayGroups(doc.data);
+  // Dropped exercises stay in the document but off the live plan (ADR-0004);
+  // their completed sets still count in the header total.
+  const plan = activeExercises(doc.data);
+  const planIds = new Set(plan.map((e) => e.exercise.id));
+  const groups = buildDisplayGroups(plan);
   const activeSetId = currentSetId(groups);
   const { completed, total } = countSets(doc.data);
   const remaining = total - completed;
@@ -252,6 +303,37 @@ export default function LivePage() {
         return;
       }
     }
+  };
+
+  const closePicker = () => {
+    setPickerOpen(false);
+    setStaged([]);
+  };
+
+  const doReplace = (slot: DocExercise, entry: ExerciseIndexEntry) => {
+    setReplaceId(null);
+    setReplaceSearch(null);
+    const from = slot.exercise.name;
+    replaceExercise.mutate(
+      { workoutExerciseId: slot.id, exerciseId: entry.id },
+      { onSuccess: () => toast(`Swapped ${from} → ${entry.name}`) },
+    );
+  };
+
+  const doRemove = (slot: DocExercise) => {
+    setExerciseMenuId(null);
+    const logged = slot.sets.filter((s) => s.completedAt !== null).length;
+    removeExercise.mutate(
+      { workoutExerciseId: slot.id },
+      {
+        onSuccess: () =>
+          toast(
+            logged > 0
+              ? `Removed ${slot.exercise.name} — ${logged} logged set${logged === 1 ? '' : 's'} stay on your record`
+              : `Removed ${slot.exercise.name}`,
+          ),
+      },
+    );
   };
 
   // All sets done → no confirmation needed (FRONTEND.md §3.3)
@@ -337,20 +419,47 @@ export default function LivePage() {
               ))}
             </div>
             {group.exercises.map((e) => (
-              <Button
-                key={e.id}
-                variant="ghost"
-                size="lg"
-                className="mt-1 w-full text-muted-foreground"
-                disabled={addSet.isPending}
-                onClick={() => addSet.mutate({ workoutExerciseId: e.id })}
-              >
-                <Plus data-icon="inline-start" />
-                Add set{group.isSuperset ? ` · ${e.exercise.name}` : ''}
-              </Button>
+              <div key={e.id} className="mt-1 flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="lg"
+                  className="min-w-0 flex-1 text-muted-foreground"
+                  disabled={addSet.isPending}
+                  onClick={() => addSet.mutate({ workoutExerciseId: e.id })}
+                >
+                  <Plus data-icon="inline-start" />
+                  Add set{group.isSuperset ? ` · ${e.exercise.name}` : ''}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon-lg"
+                  aria-label={`Options for ${e.exercise.name}`}
+                  onClick={() => setExerciseMenuId(e.id)}
+                >
+                  <EllipsisVertical className="text-muted-foreground" />
+                </Button>
+              </div>
             ))}
           </section>
         ))}
+
+        {groups.length === 0 && (
+          <p className="py-8 text-center text-sm text-muted-foreground">
+            Nothing left in this workout — add an exercise or finish up.
+          </p>
+        )}
+
+        {/* Mid-workout plan edits (ADR-0004) */}
+        <Button
+          variant="outline"
+          size="xl"
+          className="w-full"
+          disabled={addExercises.isPending}
+          onClick={() => setPickerOpen(true)}
+        >
+          <Plus data-icon="inline-start" />
+          Add exercises
+        </Button>
       </main>
 
       {/* Sticky bottom bar: rest timer or the primary action (thumb zone) */}
@@ -407,6 +516,86 @@ export default function LivePage() {
             ))}
         </div>
       </div>
+
+      {/* Add exercises: selection is staged locally, then committed in one call */}
+      {pickerOpen && (
+        <PickerSheet
+          open
+          sheetTitle="Add exercises"
+          addedIds={new Set([...planIds, ...staged.map((e) => e.id)])}
+          lockedIds={planIds}
+          onToggle={(entry) =>
+            setStaged((current) =>
+              current.some((e) => e.id === entry.id)
+                ? current.filter((e) => e.id !== entry.id)
+                : [...current, entry],
+            )
+          }
+          doneLabel={
+            staged.length > 0
+              ? `Add ${staged.length} exercise${staged.length === 1 ? '' : 's'}`
+              : 'Done'
+          }
+          onDone={() => {
+            if (staged.length > 0) {
+              addExercises.mutate({ workoutId: id, exerciseIds: staged.map((e) => e.id) });
+            }
+            closePicker();
+          }}
+          onOpenChange={(next) => !next && closePicker()}
+        />
+      )}
+
+      {/* Per-exercise 3-dot menu → replace / remove (supersets stay as built) */}
+      {(() => {
+        const slot = plan.find((e) => e.id === exerciseMenuId);
+        return slot ? (
+          <ExerciseMenuSheet
+            open
+            exerciseName={slot.exercise.name}
+            inSuperset={slot.superSetId !== null}
+            onOpenChange={(next) => !next && setExerciseMenuId(null)}
+            onReplace={() => {
+              setExerciseMenuId(null);
+              setReplaceId(slot.id);
+            }}
+            onRemove={() => doRemove(slot)}
+          />
+        ) : null;
+      })()}
+
+      {(() => {
+        const slot = plan.find((e) => e.id === replaceId);
+        return slot ? (
+          <ReplaceSheet
+            target={slot.exercise}
+            description="Similar movements — sets come from the last time you did them."
+            addedIds={planIds}
+            onOpenChange={(next) => !next && setReplaceId(null)}
+            onPick={(entry) => doReplace(slot, entry)}
+            onSearchAll={(muscleGroupId) => {
+              setReplaceId(null);
+              setReplaceSearch({ id: slot.id, muscleGroupId });
+            }}
+          />
+        ) : null;
+      })()}
+
+      {replaceSearch && (
+        <PickerSheet
+          open
+          mode="pick"
+          sheetTitle="Choose a replacement"
+          initialMuscleId={replaceSearch.muscleGroupId}
+          addedIds={planIds}
+          onToggle={() => undefined}
+          onPick={(entry) => {
+            const slot = plan.find((e) => e.id === replaceSearch.id);
+            if (slot) doReplace(slot, entry);
+          }}
+          onOpenChange={(next) => !next && setReplaceSearch(null)}
+        />
+      )}
 
       {/* Finish confirmation (only warns when sets remain) */}
       <Dialog open={finishOpen} onOpenChange={setFinishOpen}>

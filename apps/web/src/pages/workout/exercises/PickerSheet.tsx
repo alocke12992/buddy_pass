@@ -138,6 +138,9 @@ export function PickerSheet({
   sheetTitle,
   initialMuscleId = null,
   onPick,
+  onDone,
+  doneLabel,
+  lockedIds,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -150,6 +153,11 @@ export function PickerSheet({
   /** Preset muscle filter — read once on mount, so mount a fresh instance per open. */
   initialMuscleId?: string | null;
   onPick?: (entry: ExerciseIndexEntry) => void;
+  /** Footer action; omitted → the footer just closes. Dismissing the sheet never calls it. */
+  onDone?: () => void;
+  doneLabel?: string;
+  /** Already in the workout and not un-pickable here (live screen: removal lives in the 3-dot menu). */
+  lockedIds?: ReadonlySet<string>;
 }) {
   const trpc = useTRPC();
   const library = useQuery(trpc.exercises.list.queryOptions(undefined, { staleTime: Infinity }));
@@ -279,13 +287,14 @@ export function PickerSheet({
           <ul className="divide-y divide-border/60">
             {results.slice(0, RESULT_CAP).map((entry) => {
               const added = addedIds.has(entry.id);
+              const locked = lockedIds?.has(entry.id) ?? false;
               return (
                 <li key={entry.id}>
                   <div className="flex items-center gap-3 py-2">
                     <button
                       type="button"
                       aria-pressed={mode === 'toggle' ? added : undefined}
-                      disabled={mode === 'pick' && added}
+                      disabled={locked || (mode === 'pick' && added)}
                       onClick={() => (mode === 'pick' ? onPick?.(entry) : onToggle(entry))}
                       className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left hover:bg-muted/50 disabled:opacity-50"
                     >
@@ -335,11 +344,11 @@ export function PickerSheet({
             size="xl"
             variant={mode === 'pick' ? 'outline' : 'default'}
             className="w-full"
-            onClick={() => onOpenChange(false)}
+            onClick={() => (onDone ? onDone() : onOpenChange(false))}
           >
             {mode === 'pick'
               ? 'Cancel'
-              : `Done${addedTotal > 0 ? ` · ${addedTotal} selected` : ''}`}
+              : (doneLabel ?? `Done${addedTotal > 0 ? ` · ${addedTotal} selected` : ''}`)}
           </Button>
         </div>
 
@@ -358,6 +367,7 @@ export function PickerSheet({
         <ExerciseDetailSheet
           exerciseId={detailId}
           added={mode === 'toggle' && detailId !== null && addedIds.has(detailId)}
+          locked={detailId !== null && (lockedIds?.has(detailId) ?? false)}
           onClose={() => setDetailId(null)}
           onToggle={(entry) => {
             if (mode === 'pick') onPick?.(entry);

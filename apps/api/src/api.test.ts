@@ -54,6 +54,7 @@ interface WorkoutDoc {
     id: string;
     position: number;
     superSetId: string | null;
+    droppedAt: Date | null;
     exercise: ExerciseEntry;
     sets: SetOut[];
   }[];
@@ -85,7 +86,7 @@ beforeAll(async () => {
     undefined,
     alice.cookie,
   );
-  exerciseIds = list.data.slice(0, 5).map((e) => e.id);
+  exerciseIds = list.data.slice(0, 10).map((e) => e.id);
 }, 120_000);
 
 afterAll(async () => {
@@ -549,5 +550,243 @@ describe('logging state machine', () => {
     );
     expect(cancelled.data.status).toBe('cancelled');
     expect(cancelled.data.endedAt).toBeInstanceOf(Date);
+  });
+});
+
+// Mid-workout structure edits (ADR-0004): the plan is editable while logging;
+// a slot with logged work is dropped (kept for the record), never erased.
+describe('mid-workout structure edits', () => {
+  /** A workout of `ids` (2 plain sets each), already started. */
+  const startWorkout = async (name: string, ids: string[], superSetId?: string) => {
+    const created = await trpcMutation<WorkoutDoc>(
+      app.server,
+      'workouts.create',
+      {
+        name,
+        exercises: ids.map((exerciseId, i) => ({
+          exerciseId,
+          position: i,
+          superSetId,
+          sets: [0, 1].map((position) => ({
+            position,
+            isWarmup: false,
+            reps: 8,
+            weightKg: 40,
+            restSeconds: 90,
+          })),
+        })),
+      },
+      alice.cookie,
+    );
+    await trpcMutation(app.server, 'logging.start', { workoutId: created.data.id }, alice.cookie);
+    return created.data;
+  };
+
+  beforeAll(async () => {
+    // Alice's last time doing exercise 0: 11 × 61 kg, then 9 × 71 kg
+    const history = await startWorkout('History Day', [exerciseIds[0]!]);
+    const [first, second] = history.exercises[0]!.sets;
+    await trpcMutation(
+      app.server,
+      'logging.completeSet',
+      { setId: first!.id, reps: 11, weightKg: 61 },
+      alice.cookie,
+    );
+    await trpcMutation(
+      app.server,
+      'logging.completeSet',
+      { setId: second!.id, reps: 9, weightKg: 71 },
+      alice.cookie,
+    );
+    await trpcMutation(app.server, 'logging.finish', { workoutId: history.id }, alice.cookie);
+  });
+
+  it('addExercises appends at the end, prefilled from the last time you did it', async () => {
+    const live = await startWorkout('Add Day', [exerciseIds[3]!]);
+    const res = await trpcMutation<WorkoutDoc>(
+      app.server,
+      'logging.addExercises',
+      { workoutId: live.id, exerciseIds: [exerciseIds[0]!, exerciseIds[2]!] },
+      alice.cookie,
+    );
+    expect(res.data.exercises.map((e) => e.exercise.id)).toEqual([
+      exerciseIds[3],
+      exerciseIds[0],
+      exerciseIds[2],
+    ]);
+    expect(res.data.exercises.map((e) => e.position)).toEqual([0, 1, 2]);
+
+    const prefilled = res.data.exercises[1]!;
+    expect(prefilled.sets.map((s) => ({ reps: s.reps, weightKg: s.weightKg }))).toEqual([
+      { reps: 11, weightKg: 61 },
+      { reps: 9, weightKg: 71 },
+    ]);
+    expect(prefilled.sets.every((s) => s.completedAt === null)).toBe(true);
+
+    // Never performed → the builder's default block
+    const fresh = res.data.exercises[2]!;
+    expect(fresh.sets.map((s) => ({ reps: s.reps, weightKg: s.weightKg }))).toEqual([
+      { reps: 8, weightKg: 0 },
+      { reps: 8, weightKg: 0 },
+      { reps: 8, weightKg: 0 },
+    ]);
+  });
+
+  it('addExercises: owner-only, in-progress-only, known exercises, no duplicates', async () => {
+    const live = await startWorkout('Guarded', [exerciseIds[3]!]);
+
+    const notOwner = await trpcMutation(
+      app.server,
+      'logging.addExercises',
+      { workoutId: live.id, exerciseIds: [exerciseIds[0]!] },
+      bob.cookie,
+    );
+    expect(notOwner.errorCode).toBe('FORBIDDEN');
+
+    const unknown = await trpcMutation(
+      app.server,
+      'logging.addExercises',
+      { workoutId: live.id, exerciseIds: ['0195c2f0-0000-7000-8000-000000000000'] },
+      alice.cookie,
+    );
+    expect(unknown.errorCode).toBe('BAD_REQUEST');
+
+    // Already in the live plan → skipped, not duplicated
+    const dupe = await trpcMutation<WorkoutDoc>(
+      app.server,
+      'logging.addExercises',
+      { workoutId: live.id, exerciseIds: [exerciseIds[3]!, exerciseIds[2]!] },
+      alice.cookie,
+    );
+    expect(dupe.data.exercises.map((e) => e.exercise.id)).toEqual([exerciseIds[3], exerciseIds[2]]);
+
+    const planned = await trpcMutation<WorkoutDoc>(
+      app.server,
+      'workouts.create',
+      workoutInput('Not Started'),
+      alice.cookie,
+    );
+    const tooEarly = await trpcMutation(
+      app.server,
+      'logging.addExercises',
+      { workoutId: planned.data.id, exerciseIds: [exerciseIds[2]!] },
+      alice.cookie,
+    );
+    expect(tooEarly.errorCode).toBe('BAD_REQUEST');
+  });
+
+  it('removeExercise: erases an untouched slot, drops one with logged work', async () => {
+    const live = await startWorkout('Remove Day', [exerciseIds[0]!, exerciseIds[1]!]);
+    const [worked, untouched] = live.exercises;
+    await trpcMutation(
+      app.server,
+      'logging.completeSet',
+      { setId: worked!.sets[0]!.id },
+      alice.cookie,
+    );
+
+    const afterDrop = await trpcMutation<WorkoutDoc>(
+      app.server,
+      'logging.removeExercise',
+      { workoutExerciseId: worked!.id },
+      alice.cookie,
+    );
+    const dropped = afterDrop.data.exercises.find((e) => e.id === worked!.id);
+    expect(dropped?.droppedAt).toBeInstanceOf(Date);
+    // the completed set survives; the untouched one goes with the plan
+    expect(dropped?.sets.map((s) => s.id)).toEqual([worked!.sets[0]!.id]);
+    expect(dropped?.sets[0]!.completedAt).toBeInstanceOf(Date);
+
+    const afterErase = await trpcMutation<WorkoutDoc>(
+      app.server,
+      'logging.removeExercise',
+      { workoutExerciseId: untouched!.id },
+      alice.cookie,
+    );
+    expect(afterErase.data.exercises.map((e) => e.id)).toEqual([worked!.id]);
+  });
+
+  it('replaceExercise swaps in place, inheriting position and superset', async () => {
+    const groupId = '0195c2f0-1111-7000-8000-000000000000';
+    const live = await startWorkout('Swap Day', [exerciseIds[4]!, exerciseIds[5]!], groupId);
+    const target = live.exercises[0]!;
+
+    const res = await trpcMutation<WorkoutDoc>(
+      app.server,
+      'logging.replaceExercise',
+      { workoutExerciseId: target.id, exerciseId: exerciseIds[0]! },
+      alice.cookie,
+    );
+    expect(res.data.exercises.map((e) => e.exercise.id)).toEqual([exerciseIds[0], exerciseIds[5]]);
+    const swappedIn = res.data.exercises[0]!;
+    expect(swappedIn.id).not.toBe(target.id); // untouched slot is erased, not reused
+    expect(swappedIn.position).toBe(0);
+    expect(swappedIn.superSetId).toBe(groupId);
+    // fresh sets come from history, never from the exercise being replaced
+    expect(swappedIn.sets.map((s) => ({ reps: s.reps, weightKg: s.weightKg }))).toEqual([
+      { reps: 11, weightKg: 61 },
+      { reps: 9, weightKg: 71 },
+    ]);
+  });
+
+  it('replaceExercise keeps logged work on the record, ordered before its replacement', async () => {
+    const live = await startWorkout('Swap After Work', [exerciseIds[4]!, exerciseIds[5]!]);
+    const target = live.exercises[0]!;
+    await trpcMutation(
+      app.server,
+      'logging.completeSet',
+      { setId: target.sets[0]!.id, reps: 5, weightKg: 100 },
+      alice.cookie,
+    );
+
+    const res = await trpcMutation<WorkoutDoc>(
+      app.server,
+      'logging.replaceExercise',
+      { workoutExerciseId: target.id, exerciseId: exerciseIds[2]! },
+      alice.cookie,
+    );
+    expect(res.data.exercises.map((e) => e.exercise.id)).toEqual([
+      exerciseIds[4], // dropped, kept for the record
+      exerciseIds[2], // its replacement, same position
+      exerciseIds[5],
+    ]);
+    const [droppedSlot, replacement] = res.data.exercises;
+    expect(droppedSlot!.droppedAt).toBeInstanceOf(Date);
+    expect(droppedSlot!.sets.map((s) => ({ reps: s.reps, weightKg: s.weightKg }))).toEqual([
+      { reps: 5, weightKg: 100 },
+    ]);
+    expect(replacement!.droppedAt).toBeNull();
+  });
+
+  it('still counts a dropped slot toward volume once the workout is completed', async () => {
+    const before = await trpcQuery<{ totalVolumeKg: number }>(
+      app.server,
+      'stats.summary',
+      {},
+      alice.cookie,
+    );
+
+    const live = await startWorkout('Dropped Volume', [exerciseIds[6]!, exerciseIds[7]!]);
+    await trpcMutation(
+      app.server,
+      'logging.completeSet',
+      { setId: live.exercises[0]!.sets[0]!.id, reps: 10, weightKg: 30 },
+      alice.cookie,
+    );
+    await trpcMutation(
+      app.server,
+      'logging.removeExercise',
+      { workoutExerciseId: live.exercises[0]!.id },
+      alice.cookie,
+    );
+    await trpcMutation(app.server, 'logging.finish', { workoutId: live.id }, alice.cookie);
+
+    const after = await trpcQuery<{ totalVolumeKg: number }>(
+      app.server,
+      'stats.summary',
+      {},
+      alice.cookie,
+    );
+    expect(after.data.totalVolumeKg - before.data.totalVolumeKg).toBe(300);
   });
 });

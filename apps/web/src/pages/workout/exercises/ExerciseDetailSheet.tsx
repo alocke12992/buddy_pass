@@ -18,12 +18,15 @@ import { useTRPC } from '@/lib/trpc';
 export function ExerciseDetailSheet({
   exerciseId,
   added,
+  locked = false,
   onClose,
   onToggle,
 }: {
   exerciseId: string | null;
   /** Already in the workout — the action becomes removal. */
   added: boolean;
+  /** In the workout but not removable from here (live screen) — the action is inert. */
+  locked?: boolean;
   onClose: () => void;
   onToggle: (entry: ExerciseIndexEntry) => void;
 }) {
@@ -89,12 +92,18 @@ export function ExerciseDetailSheet({
             <div className="border-t p-4">
               <Button
                 size="xl"
-                variant={added ? 'outline' : 'default'}
+                variant={added || locked ? 'outline' : 'default'}
                 className="w-full"
+                disabled={locked}
                 onClick={() => onToggle(detail.data)}
               >
-                {added ? <Minus data-icon="inline-start" /> : <Plus data-icon="inline-start" />}
-                {added ? 'Remove from workout' : 'Add to workout'}
+                {!locked &&
+                  (added ? <Minus data-icon="inline-start" /> : <Plus data-icon="inline-start" />)}
+                {locked
+                  ? 'Already in this workout'
+                  : added
+                    ? 'Remove from workout'
+                    : 'Add to workout'}
               </Button>
             </div>
           </>

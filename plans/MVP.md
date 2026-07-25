@@ -155,11 +155,14 @@ workouts           owner_id FK → user, name text NOT NULL,
                    --   (attribution for clones = origin chain)
 
 workout_exercises  workout_id FK, exercise_id FK, position,
-                   super_set_id? (uuid, groups exercises into a superset)
+                   super_set_id? (uuid, groups exercises into a superset),
+                   dropped_at? timestamptz   -- removed/swapped mid-workout (ADR-0004)
                    INDEX (workout_id, position)
                    -- (as built) named position, not order: avoids a quoted reserved
                    --   word in raw SQL; no UNIQUE on position so drag-reorder can
                    --   shuffle rows freely — ordering is app-maintained
+                   -- dropped_at added by migration 0002: off the live plan, still on
+                   --   the record (only set when the slot has completed sets)
 
 workout_sets       workout_exercise_id FK, position, is_warmup bool,
                    reps int, weight_kg numeric(6,2), rest_seconds int default 90,
@@ -306,6 +309,10 @@ Plan of record: `plans/API.md` (§3 has the wiring facts). Everything in that pl
 - Gotchas recorded for later phases: consume drizzle operators via `@buddy-pass/db` re-exports (a second peer-resolved drizzle-orm instance breaks type identity); raw SQL fragments bypass drizzle's decoders (map `date_trunc` etc. with `mapWith`); tRPC mutations require `content-type: application/json` even with empty bodies (415 otherwise)
 - Prod-parity smoke test surfaced two packaging fixes: `pg` is CJS and cannot be bundled into the ESM api build (tsup `external: ['pg']` + direct api dependency so `pnpm deploy` links it); the web image must copy `packages/db` since web's `tsc -b` follows `AppRouter` types into api source. Full `--profile full` stack verified through Caddy on :8080 (health, ping, OG share page, anonymous session → `profile.get`)
 - Post-review adjustments (same day): Fastify `trustProxy: true` — the api always sits behind Caddy/Vite proxy, and without it `req.ip` is the proxy's address, collapsing every user into one rate-limit bucket (and better-auth would log proxy IPs); friendship `created_at` carried through the guest merge so `friendsSince` survives signup; OG description pluralizes its exercise count
+
+### Post-MVP: mid-workout plan edits (2026-07-24)
+
+Gyms don't cooperate with plans, so a workout in progress is no longer structurally frozen — see ADR-0004 (and the amendment note on ADR-0003). Migration `0002_light_stephen_strange.sql` adds `workout_exercises.dropped_at`; three `logging.*` mutations (`addExercises` / `replaceExercise` / `removeExercise`) shape the live plan, with new exercises prefilled from the user's last completed performance. Contracts in `plans/API.md` §2.3; UI in `plans/WEB.md` §7.
 
 ### Web UI delivery notes (2026-07-07)
 

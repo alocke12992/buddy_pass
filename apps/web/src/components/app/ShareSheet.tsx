@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Copy, Link2Off } from 'lucide-react';
+import { useEffect } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -53,18 +54,26 @@ export function ShareSheet({
   );
   const revoke = useMutation(
     trpc.sharing.revoke.mutationOptions({
-      onSuccess: async () => {
-        await invalidateLinks();
+      onSuccess: () => {
+        // Close rather than sit link-less: reopening mints a fresh one. Drop the
+        // cache too, so the next open can't flash the dead URL while it refetches.
+        onOpenChange(false);
+        queryClient.removeQueries({
+          queryKey: trpc.sharing.listForWorkout.queryKey({ workoutId }),
+        });
         toast('Link revoked — sharing again will mint a fresh one');
       },
       onError: (e) => toast.error(e.message || "Couldn't revoke the link"),
     }),
   );
 
-  const handleOpenChange = (next: boolean) => {
-    onOpenChange(next);
-    if (next && registered) create.mutate({ workoutId }); // idempotent: returns the active link
-  };
+  // Mint on open (idempotent: returns the active link). An effect, not
+  // onOpenChange — the parent owns `open`, and Base UI only reports changes the
+  // dialog itself requests, so a parent-driven open never fires the callback.
+  const mint = create.mutate;
+  useEffect(() => {
+    if (open && registered) mint({ workoutId });
+  }, [open, registered, workoutId, mint]);
 
   const copy = async () => {
     if (!active) return;
@@ -73,7 +82,7 @@ export function ShareSheet({
   };
 
   return (
-    <Sheet open={open} onOpenChange={handleOpenChange}>
+    <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" className="gap-0 rounded-t-2xl pb-[env(safe-area-inset-bottom)]">
         <SheetHeader>
           <SheetTitle>Share workout</SheetTitle>

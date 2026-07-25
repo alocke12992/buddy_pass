@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Copy, Link2Off } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -29,6 +29,7 @@ export function InviteSheet({
   const trpc = useTRPC();
   const queryClient = useQueryClient();
   const { user } = useAuthentication();
+  const registered = user !== null && !user.isAnonymous;
   const [link, setLink] = useState<{ token: string; url: string } | null>(null);
 
   const create = useMutation(
@@ -40,6 +41,8 @@ export function InviteSheet({
   const revoke = useMutation(
     trpc.friends.revokeLink.mutationOptions({
       onSuccess: async () => {
+        // Close rather than sit link-less: reopening mints a fresh one.
+        onOpenChange(false);
         setLink(null);
         await queryClient.invalidateQueries({ queryKey: trpc.friends.pathKey() });
         toast('Invite link revoked — existing buddies keep their access');
@@ -48,11 +51,13 @@ export function InviteSheet({
     }),
   );
 
-  const handleOpenChange = (next: boolean) => {
-    onOpenChange(next);
-    // Idempotent mint on open: reuses the active link if one exists
-    if (next && !user?.isAnonymous && !link && !create.isPending) create.mutate();
-  };
+  // Idempotent mint on open: reuses the active link if one exists. An effect,
+  // not onOpenChange — the parent owns `open`, and Base UI only reports changes
+  // the dialog itself requests, so a parent-driven open never fires the callback.
+  const mint = create.mutate;
+  useEffect(() => {
+    if (open && registered) mint();
+  }, [open, registered, mint]);
 
   const copy = async () => {
     if (!link) return;
@@ -61,7 +66,7 @@ export function InviteSheet({
   };
 
   return (
-    <Sheet open={open} onOpenChange={handleOpenChange}>
+    <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" className="gap-0 rounded-t-2xl pb-[env(safe-area-inset-bottom)]">
         <SheetHeader>
           <SheetTitle>Invite a buddy</SheetTitle>
@@ -71,7 +76,7 @@ export function InviteSheet({
           </SheetDescription>
         </SheetHeader>
         <div className="space-y-3 p-4 pt-0">
-          {user?.isAnonymous ? (
+          {!registered ? (
             <>
               <p className="text-sm text-muted-foreground">
                 Invites need an account, so your buddies always find the same you.

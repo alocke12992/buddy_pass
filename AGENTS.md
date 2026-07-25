@@ -25,6 +25,7 @@ Monorepo: pnpm + Turborepo. `apps/api` (Fastify + tRPC on :3000), `apps/web` (Vi
 - React Compiler lint is on: `useWatch` not `form.watch`, destructure `useSortable`, no `Date.now()` in render-scoped closures
 - `button.tsx` carries custom `xl` (44px) / `workout` (56px) sizes — don't let `shadcn add --overwrite` clobber it; theme is dark-only (`<html class="dark">`, tokens in `index.css`)
 - better-auth 403s auth POSTs that carry a session cookie without an `Origin` header — scripted/curl tests must send one (browsers always do)
+- Base UI dialogs/sheets fire `onOpenChange` only for changes the dialog itself requests (trigger, close button, Esc, outside press) — a parent flipping the controlled `open` prop never calls it. Hang open-time side effects (minting a link, etc.) off a `useEffect` keyed on `open`, not `onOpenChange`
 - `pnpm db:images` fetches exercise images to `apps/web/public/exercise-images/` (gitignored); missing images fall back to initial tiles (`ExerciseImage`)
 
 ## Daily dev

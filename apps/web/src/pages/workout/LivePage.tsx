@@ -29,12 +29,16 @@ import { cn } from '@/lib/utils';
 import { ExerciseMenuSheet } from './exercises/ExerciseMenuSheet';
 import { PickerSheet } from './exercises/PickerSheet';
 import { ReplaceSheet } from './exercises/ReplaceSheet';
+import { DeleteSetDialog } from './live/DeleteSetDialog';
 import { LiveSetRow } from './live/LiveSetRow';
+import { SetMenuSheet } from './live/SetMenuSheet';
 import {
   livePlan,
   buildDisplayGroups,
   countSets,
   currentSetId,
+  type DisplayGroup,
+  type DisplayRow,
   type DocExercise,
 } from './live/order';
 import {
@@ -57,6 +61,8 @@ function useNow(intervalMs = 500) {
   return now;
 }
 
+type DocSet = WorkoutDoc['exercises'][number]['sets'][number];
+
 type SetPatch = Partial<{
   reps: number;
   weightKg: number;
@@ -64,6 +70,12 @@ type SetPatch = Partial<{
 }>;
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/** Superset rows interleave, so they name their movement; plain ones just count. */
+const rowLabel = (group: DisplayGroup, row: DisplayRow) =>
+  group.isSuperset
+    ? `${row.exercise.exercise.name} · set ${row.setIndex + 1}`
+    : `Set ${row.setIndex + 1}`;
 
 /** The design-target screen (FRONTEND.md §3.3): full-screen, no tab bar. */
 export default function LivePage() {
@@ -81,6 +93,9 @@ export default function LivePage() {
   const [finishOpen, setFinishOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
+  // Per-set overflow, then (for logged work only) a confirm. Labels are snapshotted for the copy.
+  const [setMenu, setSetMenu] = useState<{ row: DisplayRow; label: string } | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ setId: string; label: string } | null>(null);
   // Plan edits (ADR-0004), keyed by workout_exercise id
   const [pickerOpen, setPickerOpen] = useState(false);
   const [staged, setStaged] = useState<ExerciseIndexEntry[]>([]);
@@ -95,19 +110,16 @@ export default function LivePage() {
   const unit: UnitPreference = profile.data?.settings?.unitPreference ?? 'metric';
 
   // --- optimistic cache patching -------------------------------------------
-  const patchSetInCache = (setId: string, patch: SetPatch) => {
+  const patchDocSets = (rewrite: (sets: DocSet[]) => DocSet[]) => {
     queryClient.setQueryData(queryKey, (old: WorkoutDoc | undefined) =>
       old
-        ? {
-            ...old,
-            exercises: old.exercises.map((e) => ({
-              ...e,
-              sets: e.sets.map((s) => (s.id === setId ? { ...s, ...patch } : s)),
-            })),
-          }
+        ? { ...old, exercises: old.exercises.map((e) => ({ ...e, sets: rewrite(e.sets) })) }
         : old,
     );
   };
+
+  const patchSetInCache = (setId: string, patch: SetPatch) =>
+    patchDocSets((sets) => sets.map((s) => (s.id === setId ? { ...s, ...patch } : s)));
 
   const snapshot = async () => {
     await queryClient.cancelQueries({ queryKey });
@@ -191,6 +203,23 @@ export default function LivePage() {
     trpc.logging.addSet.mutationOptions({
       onSuccess: () => queryClient.invalidateQueries({ queryKey }),
       onError: (e) => toast.error(e.message || "Couldn't add a set"),
+    }),
+  );
+
+  // A delete reshuffles no ids, so the row can go instantly; the list views carry
+  // set counts of their own, hence the wider invalidation once it lands.
+  const removeSet = useMutation(
+    trpc.logging.removeSet.mutationOptions({
+      onMutate: async (vars) => {
+        const prev = await snapshot();
+        patchDocSets((sets) => sets.filter((s) => s.id !== vars.setId));
+        return { prev };
+      },
+      onError: (e, _v, ctx) => {
+        rollback(ctx?.prev);
+        toast.error(e.message || "Couldn't delete the set");
+      },
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: trpc.workouts.pathKey() }),
     }),
   );
 
@@ -308,6 +337,13 @@ export default function LivePage() {
     }
   };
 
+  /** Logged work gets a confirm; a set you just added goes straight from the menu. */
+  const requestDeleteSet = (row: DisplayRow, label: string) => {
+    setSetMenu(null);
+    if (row.set.completedAt !== null) setPendingDelete({ setId: row.set.id, label });
+    else removeSet.mutate({ setId: row.set.id });
+  };
+
   const closePicker = () => {
     setPickerOpen(false);
     setStaged([]);
@@ -385,34 +421,36 @@ export default function LivePage() {
               <h2 className="text-h2 mb-2 truncate">{group.exercises[0]!.exercise.name}</h2>
             )}
             <div className="space-y-2">
-              {group.rows.map((row) => (
-                <LiveSetRow
-                  key={row.set.id}
-                  row={row}
-                  label={
-                    group.isSuperset
-                      ? `${row.exercise.exercise.name} · set ${row.setIndex + 1}`
-                      : `Set ${row.setIndex + 1}`
-                  }
-                  isCurrent={row.set.id === activeSetId}
-                  unit={unit}
-                  editable
-                  onDeltaReps={(d) => editSet(row.set.id, { reps: Math.max(0, row.set.reps + d) })}
-                  onStepWeight={(direction) =>
-                    editSet(row.set.id, {
-                      weightKg: steppedWeightKg(row.set.weightKg ?? 0, direction, unit),
-                    })
-                  }
-                  onToggleComplete={() =>
-                    toggleComplete(
-                      row.set.id,
-                      row.set.completedAt !== null,
-                      row.set.restSeconds,
-                      row.isLastSetOfExercise,
-                    )
-                  }
-                />
-              ))}
+              {group.rows.map((row) => {
+                const label = rowLabel(group, row);
+                return (
+                  <LiveSetRow
+                    key={row.set.id}
+                    row={row}
+                    label={label}
+                    isCurrent={row.set.id === activeSetId}
+                    unit={unit}
+                    editable
+                    onDeltaReps={(d) =>
+                      editSet(row.set.id, { reps: Math.max(0, row.set.reps + d) })
+                    }
+                    onStepWeight={(direction) =>
+                      editSet(row.set.id, {
+                        weightKg: steppedWeightKg(row.set.weightKg ?? 0, direction, unit),
+                      })
+                    }
+                    onToggleComplete={() =>
+                      toggleComplete(
+                        row.set.id,
+                        row.set.completedAt !== null,
+                        row.set.restSeconds,
+                        row.isLastSetOfExercise,
+                      )
+                    }
+                    onOpenMenu={() => setSetMenu({ row, label })}
+                  />
+                );
+              })}
             </div>
             {group.exercises.map((e) => (
               <div key={e.id} className="mt-1 flex items-center gap-1">
@@ -588,6 +626,26 @@ export default function LivePage() {
           onOpenChange={(next) => !next && setReplaceSearch(null)}
         />
       )}
+
+      {/* Per-set 3-dot menu → delete (logged sets then confirm) */}
+      <SetMenuSheet
+        open={setMenu !== null}
+        label={setMenu?.label ?? ''}
+        onOpenChange={(next) => !next && setSetMenu(null)}
+        onDelete={() => {
+          if (setMenu) requestDeleteSet(setMenu.row, setMenu.label);
+        }}
+      />
+
+      <DeleteSetDialog
+        open={pendingDelete !== null}
+        label={pendingDelete?.label ?? ''}
+        onOpenChange={(next) => !next && setPendingDelete(null)}
+        onConfirm={() => {
+          if (pendingDelete) removeSet.mutate({ setId: pendingDelete.setId });
+          setPendingDelete(null);
+        }}
+      />
 
       {/* Finish confirmation (only warns when sets remain) */}
       <Dialog open={finishOpen} onOpenChange={setFinishOpen}>

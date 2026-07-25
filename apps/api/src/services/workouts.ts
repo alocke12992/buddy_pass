@@ -337,6 +337,25 @@ export async function removeLiveExercise(db: Database, workoutExerciseId: string
   await db.transaction((tx) => dropOrEraseExercise(tx, workoutExerciseId));
 }
 
+/**
+ * Erase slots left with no sets at all — deleting sets (BUD-8) can empty one, as
+ * can planning an exercise and never giving it a set. Either way the slot records
+ * neither an intention nor work done. Run at `finish` so the completed workout
+ * reads as what happened. Dropped slots are excluded on principle: they are a
+ * record, never erased (ADR-0004), even though one always keeps a completed set.
+ */
+export async function discardEmptyExercises(db: DbOrTx, workoutId: string) {
+  await db.delete(workoutExercises).where(
+    and(
+      eq(workoutExercises.workoutId, workoutId),
+      isNull(workoutExercises.droppedAt),
+      sql`not exists (
+        select 1 from ${workoutSets} where ${workoutSets.workoutExerciseId} = ${workoutExercises.id}
+      )`,
+    ),
+  );
+}
+
 /** The caller's default visibility for new/cloned workouts ('private' until onboarding). */
 export async function defaultVisibilityFor(db: DbOrTx, userId: string) {
   const [settings] = await db

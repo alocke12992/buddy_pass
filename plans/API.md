@@ -149,12 +149,13 @@ Small, single-purpose mutations designed for optimistic updates — and shaped l
 | Procedure | Tier | Contract |
 |---|---|---|
 | `logging.start` | `authed` | `{ workoutId } → WorkoutDoc` — `planned → in_progress`, `started_at = now` |
-| `logging.finish` | `authed` | `{ workoutId } → WorkoutDoc` — `in_progress → completed`, `ended_at = now` |
+| `logging.finish` | `authed` | `{ workoutId } → WorkoutDoc` — `in_progress → completed`, `ended_at = now`; slots left with no sets at all are erased first |
 | `logging.cancel` | `authed` | `{ workoutId } → WorkoutDoc` — `in_progress → cancelled`, `ended_at = now` |
 | `logging.completeSet` | `authed` | `{ setId, reps?, weightKg? } → SetRow` — sets `completed_at = now`, applying inline overrides (the common "adjust then check off" gesture = one round trip) |
 | `logging.uncompleteSet` | `authed` | `{ setId } → SetRow` — clears `completed_at` |
 | `logging.updateSet` | `authed` | `{ setId, reps?, weightKg?, restSeconds?, isWarmup? } → SetRow` — edit without completing; also legal on completed sets (fix typos) |
 | `logging.addSet` | `authed` | `{ workoutExerciseId } → SetRow` — "one more set": appends at `order = max + 1`, defaults copied from the exercise's last set |
+| `logging.removeSet` | `authed` | `{ setId } → SetRow` — hard-deletes a mis-tapped or abandoned set, returning the row that went; legal on completed sets too |
 | `logging.addExercises` | `authed` | `{ workoutId, exerciseIds[] } → WorkoutDoc` — appends at `position = max + 1` in the given order, skipping ones already in the plan; sets prefilled from the caller's last completed performance of each (fallback 3 × 8 @ 0 kg / 90 s) |
 | `logging.replaceExercise` | `authed` | `{ workoutExerciseId, exerciseId } → WorkoutDoc` — the new exercise inherits the slot's `position` + `super_set_id` and gets prefilled sets; the old slot is dropped |
 | `logging.removeExercise` | `authed` | `{ workoutExerciseId } → WorkoutDoc` — takes the slot off the live plan |
@@ -163,7 +164,8 @@ Small, single-purpose mutations designed for optimistic updates — and shaped l
 - **Dropping** (ADR-0004) is what `removeExercise`/`replaceExercise` do to the old slot: unfinished sets are deleted, then the slot is stamped `dropped_at` (and its `super_set_id` cleared — grouping is a plan concept) if any set was completed, or deleted outright if none was. Dropped slots are frozen — set and structure mutations on them → `BAD_REQUEST`
 - Structure mutations return the whole `WorkoutDoc` (ids the client can't predict); `WorkoutDoc.exercises[]` carries `droppedAt`, ordered by `position, id` so a dropped slot precedes its replacement
 - A dropped slot is a record, not a plan: `cloneWorkout` and `toSharedWorkoutView` (§2.6) both skip them, so repeating or cloning never resurrects a swapped-out exercise. Stats and the doc's own `exerciseCount`/`setCount` do count them — the work happened
-- No set removal mid-workout in MVP (uncompleted leftovers are simply ignored by stats); no server-enforced "single active workout" — UI concern
+- `removeSet` is a **hard** delete, not a `deleted_at`: it is unreachable once a workout leaves `in_progress`, so no finished record is ever rewritten and no volume query has to carry a filter. Positions are left gapped — nothing enforces contiguity, and `addSet` only reads the max. A slot emptied of every set is erased at `finish`, since it records neither an intention nor work done
+- No server-enforced "single active workout" — UI concern
 - `planned` workouts are discarded via `workouts.delete`, not `cancel`
 
 ### 2.4 `profile` — stats, settings, weigh-ins

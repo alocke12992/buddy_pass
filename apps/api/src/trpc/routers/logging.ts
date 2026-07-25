@@ -4,10 +4,12 @@ import { desc, eq, schema, type Database } from '@buddy-pass/db';
 import { assertExercisesExist } from '../../services/exercises';
 import {
   addExercisesToWorkout,
+  discardEmptyExercises,
   getWorkoutDoc,
   removeLiveExercise,
   replaceLiveExercise,
   toSetOutput,
+  type DbOrTx,
 } from '../../services/workouts';
 import { authedProcedure, router } from '../trpc';
 
@@ -26,20 +28,25 @@ async function transition(
   from: WorkoutStatus,
   to: WorkoutStatus,
   patch: Partial<typeof workouts.$inferInsert>,
+  /** Last chance to tidy the document, in the same transaction as the status flip. */
+  beforeSeal?: (tx: DbOrTx, workoutId: string) => Promise<void>,
 ) {
-  const [row] = await db.select().from(workouts).where(eq(workouts.id, workoutId));
-  if (!row) throw new TRPCError({ code: 'NOT_FOUND' });
-  if (row.ownerId !== userId) throw new TRPCError({ code: 'FORBIDDEN' });
-  if (row.status !== from) {
-    throw new TRPCError({
-      code: 'BAD_REQUEST',
-      message: `Cannot move a ${row.status} workout to ${to}`,
-    });
-  }
-  await db
-    .update(workouts)
-    .set({ status: to, ...patch })
-    .where(eq(workouts.id, workoutId));
+  await db.transaction(async (tx) => {
+    const [row] = await tx.select().from(workouts).where(eq(workouts.id, workoutId));
+    if (!row) throw new TRPCError({ code: 'NOT_FOUND' });
+    if (row.ownerId !== userId) throw new TRPCError({ code: 'FORBIDDEN' });
+    if (row.status !== from) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: `Cannot move a ${row.status} workout to ${to}`,
+      });
+    }
+    await beforeSeal?.(tx, workoutId);
+    await tx
+      .update(workouts)
+      .set({ status: to, ...patch })
+      .where(eq(workouts.id, workoutId));
+  });
   return (await getWorkoutDoc(db, workoutId))!;
 }
 
@@ -117,9 +124,16 @@ export const loggingRouter = router({
   ),
 
   finish: authedProcedure.input(z.object({ workoutId: z.uuid() })).mutation(({ ctx, input }) =>
-    transition(ctx.db, ctx.user.id, input.workoutId, 'in_progress', 'completed', {
-      endedAt: new Date(),
-    }),
+    // Tidy before sealing: a slot emptied of every set records nothing.
+    transition(
+      ctx.db,
+      ctx.user.id,
+      input.workoutId,
+      'in_progress',
+      'completed',
+      { endedAt: new Date() },
+      discardEmptyExercises,
+    ),
   ),
 
   cancel: authedProcedure.input(z.object({ workoutId: z.uuid() })).mutation(({ ctx, input }) =>
@@ -184,6 +198,19 @@ export const loggingRouter = router({
         })
         .returning();
       return toSetOutput(created!);
+    }),
+
+  /**
+   * Drop a mis-tapped or abandoned set. A hard delete: only reachable while the
+   * workout is `in_progress`, so no completed record is ever rewritten. Positions
+   * are left gapped — `addSet` only reads the max, and nothing enforces contiguity.
+   */
+  removeSet: authedProcedure
+    .input(z.object({ setId: z.uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const set = await loadMutableSet(ctx.db, ctx.user.id, input.setId);
+      await ctx.db.delete(workoutSets).where(eq(workoutSets.id, input.setId));
+      return toSetOutput(set);
     }),
 
   /**

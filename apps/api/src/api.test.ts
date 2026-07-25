@@ -553,35 +553,35 @@ describe('logging state machine', () => {
   });
 });
 
+/** A workout of `ids` (2 plain sets each), already started. */
+const startWorkout = async (name: string, ids: string[], superSetId?: string) => {
+  const created = await trpcMutation<WorkoutDoc>(
+    app.server,
+    'workouts.create',
+    {
+      name,
+      exercises: ids.map((exerciseId, i) => ({
+        exerciseId,
+        position: i,
+        superSetId,
+        sets: [0, 1].map((position) => ({
+          position,
+          isWarmup: false,
+          reps: 8,
+          weightKg: 40,
+          restSeconds: 90,
+        })),
+      })),
+    },
+    alice.cookie,
+  );
+  await trpcMutation(app.server, 'logging.start', { workoutId: created.data.id }, alice.cookie);
+  return created.data;
+};
+
 // Mid-workout structure edits (ADR-0004): the plan is editable while logging;
 // a slot with logged work is dropped (kept for the record), never erased.
 describe('mid-workout structure edits', () => {
-  /** A workout of `ids` (2 plain sets each), already started. */
-  const startWorkout = async (name: string, ids: string[], superSetId?: string) => {
-    const created = await trpcMutation<WorkoutDoc>(
-      app.server,
-      'workouts.create',
-      {
-        name,
-        exercises: ids.map((exerciseId, i) => ({
-          exerciseId,
-          position: i,
-          superSetId,
-          sets: [0, 1].map((position) => ({
-            position,
-            isWarmup: false,
-            reps: 8,
-            weightKg: 40,
-            restSeconds: 90,
-          })),
-        })),
-      },
-      alice.cookie,
-    );
-    await trpcMutation(app.server, 'logging.start', { workoutId: created.data.id }, alice.cookie);
-    return created.data;
-  };
-
   beforeAll(async () => {
     // Alice's last time doing exercise 0: 11 × 61 kg, then 9 × 71 kg
     const history = await startWorkout('History Day', [exerciseIds[0]!]);
@@ -837,5 +837,219 @@ describe('mid-workout structure edits', () => {
       alice.cookie,
     );
     expect(after.data.totalVolumeKg - before.data.totalVolumeKg).toBe(300);
+  });
+});
+
+// Deleting sets mid-workout (BUD-8). A hard delete is safe because it is only
+// reachable while `in_progress` — no completed workout is ever rewritten.
+describe('deleting sets mid-workout', () => {
+  it('removeSet takes an uncompleted set off the workout', async () => {
+    const live = await startWorkout('Delete Day', [exerciseIds[0]!]);
+    const [first, second] = live.exercises[0]!.sets;
+
+    const res = await trpcMutation<SetOut>(
+      app.server,
+      'logging.removeSet',
+      { setId: second!.id },
+      alice.cookie,
+    );
+    expect(res.data.id).toBe(second!.id);
+
+    const after = await trpcQuery<WorkoutDoc>(
+      app.server,
+      'workouts.byId',
+      { id: live.id },
+      alice.cookie,
+    );
+    expect(after.data.exercises[0]!.sets.map((s) => s.id)).toEqual([first!.id]);
+  });
+
+  // The load-bearing case: deleting logged work is legal, and safe, because it
+  // can only happen before the workout is finished.
+  it('a deleted completed set never reaches the finished volume', async () => {
+    const before = await trpcQuery<{ totalVolumeKg: number }>(
+      app.server,
+      'stats.summary',
+      {},
+      alice.cookie,
+    );
+
+    const live = await startWorkout('Mistap Day', [exerciseIds[1]!]);
+    const [kept, mistap] = live.exercises[0]!.sets;
+    await trpcMutation(
+      app.server,
+      'logging.completeSet',
+      { setId: kept!.id, reps: 10, weightKg: 20 },
+      alice.cookie,
+    );
+    await trpcMutation(
+      app.server,
+      'logging.completeSet',
+      { setId: mistap!.id, reps: 10, weightKg: 50 },
+      alice.cookie,
+    );
+
+    const removed = await trpcMutation<SetOut>(
+      app.server,
+      'logging.removeSet',
+      { setId: mistap!.id },
+      alice.cookie,
+    );
+    expect(removed.data.completedAt).toBeInstanceOf(Date);
+
+    await trpcMutation(app.server, 'logging.finish', { workoutId: live.id }, alice.cookie);
+
+    const after = await trpcQuery<{ totalVolumeKg: number }>(
+      app.server,
+      'stats.summary',
+      {},
+      alice.cookie,
+    );
+    expect(after.data.totalVolumeKg - before.data.totalVolumeKg).toBe(200); // not 700
+  });
+
+  it('removeSet: unknown, someone else’s, planned, finished, and dropped are all refused', async () => {
+    const live = await startWorkout('Guarded Delete', [exerciseIds[2]!, exerciseIds[3]!]);
+
+    const unknown = await trpcMutation(
+      app.server,
+      'logging.removeSet',
+      { setId: '0195c2f0-3333-7000-8000-000000000000' },
+      alice.cookie,
+    );
+    expect(unknown.errorCode).toBe('NOT_FOUND');
+
+    const notOwner = await trpcMutation(
+      app.server,
+      'logging.removeSet',
+      { setId: live.exercises[0]!.sets[0]!.id },
+      bob.cookie,
+    );
+    expect(notOwner.errorCode).toBe('FORBIDDEN');
+
+    const planned = await trpcMutation<WorkoutDoc>(
+      app.server,
+      'workouts.create',
+      workoutInput('Never Started'),
+      alice.cookie,
+    );
+    const tooEarly = await trpcMutation(
+      app.server,
+      'logging.removeSet',
+      { setId: planned.data.exercises[0]!.sets[0]!.id },
+      alice.cookie,
+    );
+    expect(tooEarly.errorCode).toBe('BAD_REQUEST');
+
+    // A dropped slot is a frozen record (ADR-0004) — its sets stay put
+    const doomed = live.exercises[1]!;
+    await trpcMutation(
+      app.server,
+      'logging.completeSet',
+      { setId: doomed.sets[0]!.id },
+      alice.cookie,
+    );
+    await trpcMutation(
+      app.server,
+      'logging.removeExercise',
+      { workoutExerciseId: doomed.id },
+      alice.cookie,
+    );
+    const onDropped = await trpcMutation(
+      app.server,
+      'logging.removeSet',
+      { setId: doomed.sets[0]!.id },
+      alice.cookie,
+    );
+    expect(onDropped.errorCode).toBe('BAD_REQUEST');
+
+    await trpcMutation(app.server, 'logging.finish', { workoutId: live.id }, alice.cookie);
+    const tooLate = await trpcMutation(
+      app.server,
+      'logging.removeSet',
+      { setId: live.exercises[0]!.sets[0]!.id },
+      alice.cookie,
+    );
+    expect(tooLate.errorCode).toBe('BAD_REQUEST');
+  });
+
+  it('an emptied slot stays addressable — the next addSet restarts at position 0', async () => {
+    const live = await startWorkout('Emptied', [exerciseIds[4]!]);
+    const slot = live.exercises[0]!;
+    for (const set of slot.sets) {
+      await trpcMutation(app.server, 'logging.removeSet', { setId: set.id }, alice.cookie);
+    }
+
+    const readded = await trpcMutation<SetOut>(
+      app.server,
+      'logging.addSet',
+      { workoutExerciseId: slot.id },
+      alice.cookie,
+    );
+    expect(readded.data.position).toBe(0);
+  });
+
+  it('finish clears slots with no sets — however they got that way', async () => {
+    // One emptied by removeSet, one the builder never gave a set to
+    const created = await trpcMutation<WorkoutDoc>(
+      app.server,
+      'workouts.create',
+      {
+        name: 'Emptied At Finish',
+        exercises: [exerciseIds[5]!, exerciseIds[6]!, exerciseIds[7]!].map((exerciseId, i) => ({
+          exerciseId,
+          position: i,
+          sets:
+            i === 2
+              ? []
+              : [{ position: 0, isWarmup: false, reps: 8, weightKg: 40, restSeconds: 90 }],
+        })),
+      },
+      alice.cookie,
+    );
+    const live = created.data;
+    await trpcMutation(app.server, 'logging.start', { workoutId: live.id }, alice.cookie);
+
+    const [emptied, kept] = live.exercises;
+    await trpcMutation(
+      app.server,
+      'logging.removeSet',
+      { setId: emptied!.sets[0]!.id },
+      alice.cookie,
+    );
+
+    const finished = await trpcMutation<WorkoutDoc>(
+      app.server,
+      'logging.finish',
+      { workoutId: live.id },
+      alice.cookie,
+    );
+    expect(finished.data.exercises.map((e) => e.id)).toEqual([kept!.id]);
+    expect(finished.data.exerciseCount).toBe(1);
+  });
+
+  it('finish keeps a dropped slot even though the tidy-up runs', async () => {
+    const live = await startWorkout('Dropped Survives Finish', [exerciseIds[8]!, exerciseIds[9]!]);
+    const [dropped, kept] = live.exercises;
+    await trpcMutation(
+      app.server,
+      'logging.completeSet',
+      { setId: dropped!.sets[0]!.id },
+      alice.cookie,
+    );
+    await trpcMutation(
+      app.server,
+      'logging.removeExercise',
+      { workoutExerciseId: dropped!.id },
+      alice.cookie,
+    );
+
+    const finished = await trpcMutation<WorkoutDoc>(
+      app.server,
+      'logging.finish',
+      { workoutId: live.id },
+      alice.cookie,
+    );
+    expect(finished.data.exercises.map((e) => e.id)).toEqual([dropped!.id, kept!.id]);
   });
 });

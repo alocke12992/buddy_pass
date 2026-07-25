@@ -374,6 +374,54 @@ describe('share links + clone (the growth loop)', () => {
     expect(repeat.data).toMatchObject({ ownerId: alice.userId, originWorkoutId: sourceDoc.id });
   });
 
+  it('previews the plan a clone would give you — dropped slots left out (ADR-0004)', async () => {
+    // own user: the stats-privacy suite below asserts alice's cumulative totals
+    const swapper = await signUp(app.server, { name: 'Swap Owner', email: 'swap@social.local' });
+    const doc = await trpcMutation<WorkoutDoc>(
+      app.server,
+      'workouts.create',
+      {
+        name: 'Swapped Mid-Session',
+        exercises: [exerciseIds[0]!, exerciseIds[1]!].map((exerciseId, position) => ({
+          exerciseId,
+          position,
+          sets: [{ position: 0, isWarmup: false, reps: 8, weightKg: 40, restSeconds: 90 }],
+        })),
+      },
+      swapper.cookie,
+    );
+    await trpcMutation(app.server, 'logging.start', { workoutId: doc.data.id }, swapper.cookie);
+    await trpcMutation(
+      app.server,
+      'logging.completeSet',
+      { setId: doc.data.exercises[0]!.sets[0]!.id },
+      swapper.cookie,
+    );
+    await trpcMutation(
+      app.server,
+      'logging.removeExercise',
+      { workoutExerciseId: doc.data.exercises[0]!.id },
+      swapper.cookie,
+    );
+    await trpcMutation(app.server, 'logging.finish', { workoutId: doc.data.id }, swapper.cookie);
+
+    const share = await trpcMutation<{ token: string }>(
+      app.server,
+      'sharing.create',
+      { workoutId: doc.data.id },
+      swapper.cookie,
+    );
+    const resolved = await trpcQuery<{
+      workout: { exerciseCount: number; setCount: number; exercises: { id: string }[] };
+    }>(app.server, 'sharing.resolve', { token: share.data.token });
+    expect(resolved.data.workout.exerciseCount).toBe(1);
+    expect(resolved.data.workout.setCount).toBe(1);
+    expect(resolved.data.workout.exercises.map((e) => e.id)).toEqual([doc.data.exercises[1]!.id]);
+
+    const og = await app.server.inject({ method: 'GET', url: `/s/${share.data.token}` });
+    expect(og.body).toContain('1 exercise · shared by Swap Owner');
+  });
+
   it('unknown token → NOT_FOUND; revoked → FORBIDDEN for resolve and clone', async () => {
     const unknown = await trpcQuery(app.server, 'sharing.resolve', { token: 'nosuchtoken1' });
     expect(unknown.errorCode).toBe('NOT_FOUND');

@@ -81,6 +81,7 @@ The design target screen (design-system principle 1). Full-screen takeover, no t
 
 - **Layout:** scrollable list of all exercises; each shows its set rows. Current set is visually dominant (display-size numerals). Superset groups render bracketed, sets interleaved in order.
 - **Set row:** reps + weight steppers (56px targets), inline editable mid-workout; check to complete (`completed_at`) → volt check pop.
+- **Plan edits (ADR-0004):** `Add exercises` below the list opens the picker (multi-select, committed on Done); each exercise's 3-dot menu offers `Replace` / `Remove`. Added and swapped-in exercises arrive prefilled from your last time doing them. A removed/swapped exercise leaves the screen at once; if you'd already logged sets in it, those stay on the record and reappear in the summary tagged `Dropped`.
 - **Sticky bottom bar:** rest timer (auto-starts from the completed set's `rest_seconds`; **not** auto-started on the last set of each exercise, per MVP.md) with skip/±15s; primary `Complete set` action; elapsed workout time.
 - **Header:** workout name, elapsed timer, overflow menu → `Cancel workout` (confirmation; sets status `cancelled`).
 - **Finish:** enabled always; if incomplete sets remain, confirm ("3 sets unfinished — finish anyway?"). Sets `completed` + `ended_at` → summary.

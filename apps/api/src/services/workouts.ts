@@ -7,7 +7,10 @@ import {
   desc,
   eq,
   inArray,
+  isNotNull,
+  isNull,
   lt,
+  max,
   schema,
   sql,
   type Database,
@@ -63,6 +66,8 @@ function toWorkoutDoc(row: WorkoutDocRow) {
     id: we.id,
     position: we.position,
     superSetId: we.superSetId,
+    /** Non-null = dropped mid-workout: off the live plan, still on the record (ADR-0004). */
+    droppedAt: we.droppedAt,
     exercise: toExerciseIndexEntry(we.exercise),
     sets: we.sets.map(toSetOutput),
   }));
@@ -83,7 +88,8 @@ export async function getWorkoutDoc(db: DbOrTx, id: string): Promise<WorkoutDoc 
     where: eq(workouts.id, id),
     with: {
       exercises: {
-        orderBy: [asc(workoutExercises.position)],
+        // id breaks position ties: a dropped slot (older uuidv7) sorts before its replacement
+        orderBy: [asc(workoutExercises.position), asc(workoutExercises.id)],
         with: {
           exercise: { with: exerciseRelationsWith },
           sets: { orderBy: [asc(workoutSets.position)] },
@@ -171,6 +177,166 @@ export async function replaceWorkoutChildren(
   if (setValues.length > 0) await tx.insert(workoutSets).values(setValues);
 }
 
+// --- mid-workout structure edits (ADR-0004) ---------------------------------
+
+type SetTemplate = Pick<SetRow, 'isWarmup' | 'reps' | 'weightKg' | 'restSeconds'>;
+
+/** Same starting block the builder gives a freshly picked exercise: 3 × 8 at bodyweight. */
+const defaultSetTemplates = (): SetTemplate[] =>
+  Array.from({ length: 3 }, () => ({ isWarmup: false, reps: 8, weightKg: 0, restSeconds: 90 }));
+
+/**
+ * How an exercise added mid-workout gets its numbers: whatever the user actually
+ * completed the last time they did it, falling back to the builder's defaults.
+ */
+async function lastPerformedSets(
+  db: DbOrTx,
+  opts: { userId: string; exerciseId: string },
+): Promise<SetTemplate[]> {
+  const [previous] = await db
+    .select({ id: workoutExercises.id })
+    .from(workoutExercises)
+    .innerJoin(workouts, eq(workoutExercises.workoutId, workouts.id))
+    .innerJoin(workoutSets, eq(workoutSets.workoutExerciseId, workoutExercises.id))
+    .where(
+      and(
+        eq(workouts.ownerId, opts.userId),
+        eq(workouts.status, 'completed'),
+        eq(workoutExercises.exerciseId, opts.exerciseId),
+        isNotNull(workoutSets.completedAt),
+      ),
+    )
+    // one row per completed set — the first is the most recent slot (uuidv7 breaks same-workout ties)
+    .orderBy(desc(workouts.endedAt), desc(workoutExercises.id))
+    .limit(1);
+  if (!previous) return defaultSetTemplates();
+
+  const rows = await db
+    .select()
+    .from(workoutSets)
+    .where(and(eq(workoutSets.workoutExerciseId, previous.id), isNotNull(workoutSets.completedAt)))
+    .orderBy(asc(workoutSets.position));
+  return rows.map((s) => ({
+    isWarmup: s.isWarmup,
+    reps: s.reps,
+    weightKg: s.weightKg,
+    restSeconds: s.restSeconds,
+  }));
+}
+
+/** One exercise into a live workout, prefilled from the caller's last performance of it. */
+async function insertLiveExercise(
+  tx: DbOrTx,
+  opts: {
+    workoutId: string;
+    userId: string;
+    exerciseId: string;
+    position: number;
+    superSetId: string | null;
+  },
+) {
+  const [created] = await tx
+    .insert(workoutExercises)
+    .values({
+      workoutId: opts.workoutId,
+      exerciseId: opts.exerciseId,
+      position: opts.position,
+      superSetId: opts.superSetId,
+    })
+    .returning({ id: workoutExercises.id });
+  const templates = await lastPerformedSets(tx, opts);
+  await tx.insert(workoutSets).values(
+    templates.map((t, position) => ({
+      workoutExerciseId: created!.id,
+      position,
+      ...t,
+    })),
+  );
+}
+
+/**
+ * Take a slot off the live plan. Its unfinished sets were only ever a plan, so
+ * they go; anything completed is a record of work done, so the slot survives
+ * as *dropped* instead of being erased. Superset membership is a plan concept,
+ * so it's cleared — otherwise a dropped slot would still bracket with the
+ * exercise that replaced it.
+ */
+async function dropOrEraseExercise(tx: DbOrTx, workoutExerciseId: string) {
+  await tx
+    .delete(workoutSets)
+    .where(
+      and(eq(workoutSets.workoutExerciseId, workoutExerciseId), isNull(workoutSets.completedAt)),
+    );
+  const [remaining] = await tx
+    .select({ n: count() })
+    .from(workoutSets)
+    .where(eq(workoutSets.workoutExerciseId, workoutExerciseId));
+  if ((remaining?.n ?? 0) === 0) {
+    await tx.delete(workoutExercises).where(eq(workoutExercises.id, workoutExerciseId));
+    return;
+  }
+  await tx
+    .update(workoutExercises)
+    .set({ droppedAt: new Date(), superSetId: null })
+    .where(eq(workoutExercises.id, workoutExerciseId));
+}
+
+/** Append to the end of the live plan, skipping exercises already in it. */
+export async function addExercisesToWorkout(
+  db: Database,
+  opts: { workoutId: string; userId: string; exerciseIds: readonly string[] },
+) {
+  await db.transaction(async (tx) => {
+    const present = await tx
+      .select({ exerciseId: workoutExercises.exerciseId })
+      .from(workoutExercises)
+      .where(
+        and(eq(workoutExercises.workoutId, opts.workoutId), isNull(workoutExercises.droppedAt)),
+      );
+    const alreadyPresent = new Set(present.map((e) => e.exerciseId));
+    const toAdd = [...new Set(opts.exerciseIds)].filter((id) => !alreadyPresent.has(id));
+    if (toAdd.length === 0) return;
+
+    const [highest] = await tx
+      .select({ position: max(workoutExercises.position) })
+      .from(workoutExercises)
+      .where(eq(workoutExercises.workoutId, opts.workoutId));
+
+    let position = (highest?.position ?? -1) + 1;
+    for (const exerciseId of toAdd) {
+      await insertLiveExercise(tx, {
+        workoutId: opts.workoutId,
+        userId: opts.userId,
+        exerciseId,
+        position,
+        superSetId: null,
+      });
+      position++;
+    }
+  });
+}
+
+/** Swap the movement in a live slot: the old one is dropped, the new one inherits its place. */
+export async function replaceLiveExercise(
+  db: Database,
+  opts: { slot: typeof workoutExercises.$inferSelect; userId: string; exerciseId: string },
+) {
+  await db.transaction(async (tx) => {
+    await dropOrEraseExercise(tx, opts.slot.id);
+    await insertLiveExercise(tx, {
+      workoutId: opts.slot.workoutId,
+      userId: opts.userId,
+      exerciseId: opts.exerciseId,
+      position: opts.slot.position,
+      superSetId: opts.slot.superSetId,
+    });
+  });
+}
+
+export async function removeLiveExercise(db: Database, workoutExerciseId: string) {
+  await db.transaction((tx) => dropOrEraseExercise(tx, workoutExerciseId));
+}
+
 /** The caller's default visibility for new/cloned workouts ('private' until onboarding). */
 export async function defaultVisibilityFor(db: DbOrTx, userId: string) {
   const [settings] = await db
@@ -199,7 +365,10 @@ export async function cloneWorkout(
       where: eq(workouts.id, opts.sourceId),
       with: {
         exercises: {
-          orderBy: [asc(workoutExercises.position)],
+          // A clone is the plan as performed: dropped slots were swapped out or
+          // removed, so copying them would resurrect them beside their replacement
+          where: isNull(workoutExercises.droppedAt),
+          orderBy: [asc(workoutExercises.position), asc(workoutExercises.id)],
           with: { sets: { orderBy: [asc(workoutSets.position)] } },
         },
       },
@@ -222,10 +391,11 @@ export async function cloneWorkout(
       const weRows = await tx
         .insert(workoutExercises)
         .values(
-          source.exercises.map((we) => ({
+          // renumbered: filtering dropped slots can leave gaps in the source's positions
+          source.exercises.map((we, position) => ({
             workoutId: created!.id,
             exerciseId: we.exerciseId,
-            position: we.position,
+            position,
             superSetId: we.superSetId,
           })),
         )

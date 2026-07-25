@@ -17,6 +17,7 @@ import {
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
+import { DroppedBadge } from '@/components/app/DroppedBadge';
 import { EmptyState } from '@/components/app/EmptyState';
 import { RescheduleSheet } from '@/components/app/RescheduleSheet';
 import { ShareSheet } from '@/components/app/ShareSheet';
@@ -38,10 +39,11 @@ import type { WorkoutDoc } from '@/lib/api-types';
 import { formatDuration, formatWeight } from '@/lib/format';
 import { trpcErrorCode, useTRPC } from '@/lib/trpc';
 import { cn } from '@/lib/utils';
-import { buildDisplayGroups, completedVolumeKg, countSets } from './live/order';
+import { buildDisplayGroups, completedVolumeKg, countSets, livePlan } from './live/order';
 
 function ExerciseList({ doc, unit }: { doc: WorkoutDoc; unit: UnitPreference }) {
-  const groups = buildDisplayGroups(doc);
+  // Dropped exercises join the record only once the session is over (ADR-0004)
+  const groups = buildDisplayGroups(doc.status === 'in_progress' ? livePlan(doc) : doc.exercises);
   const showChecks = doc.status === 'completed' || doc.status === 'cancelled';
   return (
     <div className="space-y-4">
@@ -53,7 +55,10 @@ function ExerciseList({ doc, unit }: { doc: WorkoutDoc; unit: UnitPreference }) 
           {group.isSuperset && <p className="text-label mb-2 text-primary">Superset</p>}
           {group.exercises.map((we) => (
             <div key={we.id} className="mb-3 last:mb-0">
-              <h3 className="mb-1.5 truncate text-sm font-semibold">{we.exercise.name}</h3>
+              <h3 className="mb-1.5 flex items-center gap-2 truncate text-sm font-semibold">
+                <span className="truncate">{we.exercise.name}</span>
+                {we.droppedAt && <DroppedBadge />}
+              </h3>
               <ul className="divide-y rounded-xl border bg-card">
                 {we.sets.map((set, i) => (
                   <li key={set.id} className="numeric flex items-center gap-3 px-4 py-2 text-sm">

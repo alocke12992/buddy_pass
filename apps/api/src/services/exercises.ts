@@ -1,4 +1,5 @@
-import { asc, eq, schema, type Database } from '@buddy-pass/db';
+import { asc, eq, inArray, schema, type Database } from '@buddy-pass/db';
+import { TRPCError } from '@trpc/server';
 
 const { exercises } = schema;
 
@@ -60,6 +61,19 @@ export async function getExerciseDetail(db: Database, id: string) {
     instructions: row.instructions,
     images: row.images,
   };
+}
+
+/** FK violations read as 500s — surface unknown exercise ids as BAD_REQUEST instead. */
+export async function assertExercisesExist(db: Database, exerciseIds: readonly string[]) {
+  const ids = [...new Set(exerciseIds)];
+  if (ids.length === 0) return;
+  const found = await db
+    .select({ id: exercises.id })
+    .from(exercises)
+    .where(inArray(exercises.id, ids));
+  if (found.length !== ids.length) {
+    throw new TRPCError({ code: 'BAD_REQUEST', message: 'Unknown exercise id' });
+  }
 }
 
 /** Vocab for filter chips — fixed lists, not paginated. */

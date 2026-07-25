@@ -34,7 +34,7 @@ function MenuAction({
   );
 }
 
-/** Per-exercise overflow menu (the 3-dot button on a builder card). */
+/** Per-exercise overflow menu (the 3-dot button). Superset editing is builder-only. */
 export function ExerciseMenuSheet({
   exerciseName,
   inSuperset,
@@ -49,7 +49,8 @@ export function ExerciseMenuSheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onReplace: () => void;
-  onSuperset: () => void;
+  /** Omitted → no superset row (mid-workout grouping stays frozen). */
+  onSuperset?: () => void;
   onRemove: () => void;
 }) {
   return (
@@ -61,11 +62,13 @@ export function ExerciseMenuSheet({
         </SheetHeader>
         <div className="space-y-1 p-4 pt-0">
           <MenuAction icon={ArrowLeftRight} label="Replace exercise" onClick={onReplace} />
-          <MenuAction
-            icon={Link2}
-            label={inSuperset ? 'Edit superset' : 'Build superset'}
-            onClick={onSuperset}
-          />
+          {onSuperset && (
+            <MenuAction
+              icon={Link2}
+              label={inSuperset ? 'Edit superset' : 'Build superset'}
+              onClick={onSuperset}
+            />
+          )}
           <MenuAction icon={Trash2} label="Remove from workout" destructive onClick={onRemove} />
         </div>
       </SheetContent>

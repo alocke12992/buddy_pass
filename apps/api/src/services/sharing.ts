@@ -30,15 +30,20 @@ export async function resolveShareToken(db: Database, token: string): Promise<Sh
   return { ok: true, link, workout, owner: owner ?? { name: 'Someone', image: null } };
 }
 
-/** WorkoutDoc minus visibility/status noise — structure only, no completedAt (plans/API.md §2.6). */
+/**
+ * WorkoutDoc minus visibility/status noise — structure only, no completedAt
+ * (plans/API.md §2.6). This is a preview of what cloning gives you, so dropped
+ * slots are left out exactly as `cloneWorkout` leaves them out (ADR-0004).
+ */
 export function toSharedWorkoutView(doc: WorkoutDoc) {
+  const exercises = doc.exercises.filter((e) => e.droppedAt === null);
   return {
     id: doc.id,
     name: doc.name,
     notes: doc.notes,
-    exerciseCount: doc.exerciseCount,
-    setCount: doc.setCount,
-    exercises: doc.exercises.map((e) => ({
+    exerciseCount: exercises.length,
+    setCount: exercises.reduce((n, e) => n + e.sets.length, 0),
+    exercises: exercises.map((e) => ({
       id: e.id,
       position: e.position,
       superSetId: e.superSetId,

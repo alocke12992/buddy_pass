@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Check, Share2, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router';
+import { DroppedBadge } from '@/components/app/DroppedBadge';
 import { ErrorCard } from '@/components/app/ErrorCard';
 import { ShareSheet } from '@/components/app/ShareSheet';
 import { Button } from '@/components/ui/button';
@@ -91,7 +92,10 @@ export default function SummaryPage() {
                   }
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{we.exercise.name}</p>
+                  <p className="flex items-center gap-2 text-sm font-medium">
+                    <span className="truncate">{we.exercise.name}</span>
+                    {we.droppedAt && <DroppedBadge />}
+                  </p>
                   <p className="numeric text-xs text-muted-foreground">
                     {done.length}/{we.sets.length} sets · {formatWeight(exVolume, unit)}
                   </p>

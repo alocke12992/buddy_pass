@@ -51,6 +51,8 @@ export const workoutExercises = pgTable(
     position: integer().notNull(),
     /** Exercises sharing a super_set_id form a superset; no FK — it's a grouping token. */
     superSetId: uuid(),
+    /** Dropped mid-workout (removed or swapped out): off the live plan, kept for the record. */
+    droppedAt: timestamp({ withTimezone: true }),
     ...timestamps,
   },
   (t) => [index().on(t.workoutId, t.position)],

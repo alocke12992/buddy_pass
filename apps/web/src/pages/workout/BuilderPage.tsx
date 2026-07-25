@@ -34,11 +34,11 @@ import { Skeleton } from '@/components/ui/skeleton';
 import type { ExerciseIndexEntry, WorkoutDoc } from '@/lib/api-types';
 import { useTRPC } from '@/lib/trpc';
 import { ExerciseCard } from './builder/ExerciseCard';
-import { ExerciseMenuSheet } from './builder/ExerciseMenuSheet';
-import { PickerSheet } from './builder/PickerSheet';
-import { ReplaceSheet } from './builder/ReplaceSheet';
 import { SaveSheet } from './builder/SaveSheet';
 import { SupersetSheet } from './builder/SupersetSheet';
+import { ExerciseMenuSheet } from './exercises/ExerciseMenuSheet';
+import { PickerSheet } from './exercises/PickerSheet';
+import { ReplaceSheet } from './exercises/ReplaceSheet';
 import {
   addSet,
   builderFromDoc,
@@ -313,7 +313,8 @@ function BuilderEditor({ initial, workoutId }: { initial: BuilderState; workoutI
         const replacing = exerciseByKey(replaceKey);
         return replacing ? (
           <ReplaceSheet
-            exercise={replacing}
+            target={replacing.exercise}
+            description="Similar movements — sets and weights carry over."
             addedIds={addedIds}
             onOpenChange={(next) => !next && setReplaceKey(null)}
             onPick={(entry) => doReplace(replacing.key, entry)}

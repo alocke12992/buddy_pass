@@ -1,7 +1,14 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { desc, eq, schema, type Database } from '@buddy-pass/db';
-import { getWorkoutDoc, toSetOutput } from '../../services/workouts';
+import { assertExercisesExist } from '../../services/exercises';
+import {
+  addExercisesToWorkout,
+  getWorkoutDoc,
+  removeLiveExercise,
+  replaceLiveExercise,
+  toSetOutput,
+} from '../../services/workouts';
 import { authedProcedure, router } from '../trpc';
 
 const { workouts, workoutExercises, workoutSets } = schema;
@@ -9,8 +16,8 @@ const { workouts, workoutExercises, workoutSets } = schema;
 type WorkoutStatus = (typeof workouts.$inferSelect)['status'];
 
 // The hot path (ADR-0003): fine-grained, single-purpose mutations shaped like
-// the events realtime sync mode will broadcast. Exercise structure is frozen
-// once in progress; only sets are editable/appendable.
+// the events realtime sync mode will broadcast. Sets and — since ADR-0004 —
+// the exercise list itself are editable while a workout is in progress.
 
 async function transition(
   db: Database,
@@ -36,19 +43,50 @@ async function transition(
   return (await getWorkoutDoc(db, workoutId))!;
 }
 
+function assertLive(workout: typeof workouts.$inferSelect | undefined, userId: string) {
+  if (!workout) throw new TRPCError({ code: 'NOT_FOUND' });
+  if (workout.ownerId !== userId) throw new TRPCError({ code: 'FORBIDDEN' });
+  if (workout.status !== 'in_progress') {
+    throw new TRPCError({ code: 'BAD_REQUEST', message: 'Workout is not in progress' });
+  }
+  return workout;
+}
+
+async function loadLiveWorkout(db: Database, userId: string, workoutId: string) {
+  const [row] = await db.select().from(workouts).where(eq(workouts.id, workoutId));
+  return assertLive(row, userId);
+}
+
+/** Dropped slots are frozen records of work done — nothing mutates them again. */
+function assertNotDropped(slot: typeof workoutExercises.$inferSelect) {
+  if (slot.droppedAt !== null) {
+    throw new TRPCError({ code: 'BAD_REQUEST', message: 'Exercise is no longer in this workout' });
+  }
+}
+
+async function loadLiveExercise(db: Database, userId: string, workoutExerciseId: string) {
+  const [row] = await db
+    .select({ slot: workoutExercises, workout: workouts })
+    .from(workoutExercises)
+    .innerJoin(workouts, eq(workoutExercises.workoutId, workouts.id))
+    .where(eq(workoutExercises.id, workoutExerciseId));
+  if (!row) throw new TRPCError({ code: 'NOT_FOUND' });
+  assertLive(row.workout, userId);
+  assertNotDropped(row.slot);
+  return row.slot;
+}
+
 /** Load a set + its workout, enforcing owner + in_progress (sets are only mutable mid-workout). */
 async function loadMutableSet(db: Database, userId: string, setId: string) {
   const [row] = await db
-    .select({ set: workoutSets, workout: workouts })
+    .select({ set: workoutSets, slot: workoutExercises, workout: workouts })
     .from(workoutSets)
     .innerJoin(workoutExercises, eq(workoutSets.workoutExerciseId, workoutExercises.id))
     .innerJoin(workouts, eq(workoutExercises.workoutId, workouts.id))
     .where(eq(workoutSets.id, setId));
   if (!row) throw new TRPCError({ code: 'NOT_FOUND' });
-  if (row.workout.ownerId !== userId) throw new TRPCError({ code: 'FORBIDDEN' });
-  if (row.workout.status !== 'in_progress') {
-    throw new TRPCError({ code: 'BAD_REQUEST', message: 'Workout is not in progress' });
-  }
+  assertLive(row.workout, userId);
+  assertNotDropped(row.slot);
   return row.set;
 }
 
@@ -125,16 +163,7 @@ export const loggingRouter = router({
   addSet: authedProcedure
     .input(z.object({ workoutExerciseId: z.uuid() }))
     .mutation(async ({ ctx, input }) => {
-      const [row] = await ctx.db
-        .select({ workoutExercise: workoutExercises, workout: workouts })
-        .from(workoutExercises)
-        .innerJoin(workouts, eq(workoutExercises.workoutId, workouts.id))
-        .where(eq(workoutExercises.id, input.workoutExerciseId));
-      if (!row) throw new TRPCError({ code: 'NOT_FOUND' });
-      if (row.workout.ownerId !== ctx.user.id) throw new TRPCError({ code: 'FORBIDDEN' });
-      if (row.workout.status !== 'in_progress') {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Workout is not in progress' });
-      }
+      await loadLiveExercise(ctx.db, ctx.user.id, input.workoutExerciseId);
 
       const [last] = await ctx.db
         .select()
@@ -155,5 +184,43 @@ export const loggingRouter = router({
         })
         .returning();
       return toSetOutput(created!);
+    }),
+
+  /**
+   * Mid-session plan edits (ADR-0004). Structure changes reshuffle ids, so these
+   * return the whole document rather than a row — the client re-seeds its cache.
+   */
+  addExercises: authedProcedure
+    .input(z.object({ workoutId: z.uuid(), exerciseIds: z.array(z.uuid()).min(1).max(20) }))
+    .mutation(async ({ ctx, input }) => {
+      await loadLiveWorkout(ctx.db, ctx.user.id, input.workoutId);
+      await assertExercisesExist(ctx.db, input.exerciseIds);
+      await addExercisesToWorkout(ctx.db, {
+        workoutId: input.workoutId,
+        userId: ctx.user.id,
+        exerciseIds: input.exerciseIds,
+      });
+      return (await getWorkoutDoc(ctx.db, input.workoutId))!;
+    }),
+
+  replaceExercise: authedProcedure
+    .input(z.object({ workoutExerciseId: z.uuid(), exerciseId: z.uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const slot = await loadLiveExercise(ctx.db, ctx.user.id, input.workoutExerciseId);
+      await assertExercisesExist(ctx.db, [input.exerciseId]);
+      await replaceLiveExercise(ctx.db, {
+        slot,
+        userId: ctx.user.id,
+        exerciseId: input.exerciseId,
+      });
+      return (await getWorkoutDoc(ctx.db, slot.workoutId))!;
+    }),
+
+  removeExercise: authedProcedure
+    .input(z.object({ workoutExerciseId: z.uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const slot = await loadLiveExercise(ctx.db, ctx.user.id, input.workoutExerciseId);
+      await removeLiveExercise(ctx.db, slot.id);
+      return (await getWorkoutDoc(ctx.db, slot.workoutId))!;
     }),
 });

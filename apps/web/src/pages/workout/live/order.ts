@@ -1,6 +1,6 @@
 import type { WorkoutDoc } from '@/lib/api-types';
 
-type DocExercise = WorkoutDoc['exercises'][number];
+export type DocExercise = WorkoutDoc['exercises'][number];
 type DocSet = DocExercise['sets'][number];
 
 export interface DisplayRow {
@@ -21,25 +21,31 @@ export interface DisplayGroup {
 }
 
 /**
+ * The live plan: what's still to be done. Dropped exercises (removed or swapped
+ * out mid-workout, ADR-0004) survive only as a record of the sets completed in
+ * them, so they belong to the finished workout — never to a session in progress.
+ */
+export function livePlan(doc: WorkoutDoc): DocExercise[] {
+  return doc.exercises.filter((e) => e.droppedAt === null);
+}
+
+/**
  * Live-screen order (FRONTEND.md §3.3): contiguous superset groups render
  * bracketed with their sets interleaved round-robin (A1 B1 A2 B2 …); plain
  * exercises keep their sets in sequence.
  */
-export function buildDisplayGroups(doc: WorkoutDoc): DisplayGroup[] {
+export function buildDisplayGroups(list: readonly DocExercise[]): DisplayGroup[] {
   const groups: DisplayGroup[] = [];
   let i = 0;
-  while (i < doc.exercises.length) {
-    const current = doc.exercises[i]!;
+  while (i < list.length) {
+    const current = list[i]!;
     let runEnd = i + 1;
     if (current.superSetId !== null) {
-      while (
-        runEnd < doc.exercises.length &&
-        doc.exercises[runEnd]!.superSetId === current.superSetId
-      ) {
+      while (runEnd < list.length && list[runEnd]!.superSetId === current.superSetId) {
         runEnd++;
       }
     }
-    const exercises = doc.exercises.slice(i, runEnd);
+    const exercises = list.slice(i, runEnd);
     const isSuperset = exercises.length > 1;
 
     const rows: DisplayRow[] = [];

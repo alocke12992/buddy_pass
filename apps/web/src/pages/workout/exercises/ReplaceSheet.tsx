@@ -14,7 +14,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import type { ExerciseIndexEntry } from '@/lib/api-types';
 import { useTRPC } from '@/lib/trpc';
 import { rankReplacements } from './replaceRanking';
-import type { BuilderExercise } from './state';
 
 /**
  * Replace flow, step 1: similar exercises (same primary muscle, closest
@@ -22,13 +21,16 @@ import type { BuilderExercise } from './state';
  * pre-filtered to the same muscle group.
  */
 export function ReplaceSheet({
-  exercise,
+  target,
+  description,
   addedIds,
   onOpenChange,
   onPick,
   onSearchAll,
 }: {
-  exercise: BuilderExercise;
+  target: ExerciseIndexEntry;
+  /** What happens to the sets — differs between the builder and a live workout. */
+  description: string;
   addedIds: ReadonlySet<string>;
   onOpenChange: (open: boolean) => void;
   onPick: (entry: ExerciseIndexEntry) => void;
@@ -39,7 +41,6 @@ export function ReplaceSheet({
   const library = useQuery(trpc.exercises.list.queryOptions(undefined, { staleTime: Infinity }));
   const filters = useQuery(trpc.exercises.filters.queryOptions(undefined, { staleTime: Infinity }));
 
-  const target = exercise.exercise;
   const suggestions = useMemo(
     () => (library.data ? rankReplacements(target, library.data, addedIds) : []),
     [library.data, target, addedIds],
@@ -57,7 +58,7 @@ export function ReplaceSheet({
       >
         <SheetHeader>
           <SheetTitle>Replace {target.name}</SheetTitle>
-          <SheetDescription>Similar movements — sets and weights carry over.</SheetDescription>
+          <SheetDescription>{description}</SheetDescription>
         </SheetHeader>
         <div className="min-h-0 flex-1 overflow-y-auto px-4">
           {library.isPending && (

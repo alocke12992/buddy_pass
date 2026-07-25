@@ -32,7 +32,11 @@ A revocable token granting read-and-clone access to one workout, regardless of i
 ### Workouts
 
 **Workout**:
-A named, ordered plan of exercises with sets, owned by one user, moving through `planned → in_progress → completed | cancelled`. Structure freezes at start; only sets change mid-workout.
+A named, ordered plan of exercises with sets, owned by one user, moving through `planned → in_progress → completed | cancelled`. Both its exercises and its sets stay editable while in progress; only the builder's whole-document edits stop at start.
+
+**Dropped exercise**:
+An exercise taken out of a workout mid-session — removed outright, or swapped for another. It leaves the live plan immediately; any sets already completed in it stay on the record and appear in the finished workout.
+_Avoid_: deleted exercise, skipped exercise
 
 **Clone**:
 A copy of a workout's structure under a new owner, linked to its source via the origin chain. Completion state is never copied; visibility resets to the cloner's default.

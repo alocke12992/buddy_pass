@@ -1,5 +1,5 @@
 import type { UnitPreference } from '@buddy-pass/shared';
-import { Check, Minus, Plus } from 'lucide-react';
+import { Check, EllipsisVertical, Minus, Plus } from 'lucide-react';
 import { displayWeight, weightUnitLabel } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { DisplayRow } from './order';
@@ -71,6 +71,7 @@ export function LiveSetRow({
   onDeltaReps,
   onStepWeight,
   onToggleComplete,
+  onOpenMenu,
 }: {
   row: DisplayRow;
   /** e.g. "Set 2" or the exercise name inside a superset group. */
@@ -82,6 +83,8 @@ export function LiveSetRow({
   /** One tap up or down; the caller decides what the next weight is. */
   onStepWeight: (direction: 1 | -1) => void;
   onToggleComplete: () => void;
+  /** Omitted → no overflow affordance (read-only and builder contexts stay untouched). */
+  onOpenMenu?: () => void;
 }) {
   const completed = row.set.completedAt !== null;
   const weightValue = displayWeight(row.set.weightKg ?? 0, unit);
@@ -95,9 +98,26 @@ export function LiveSetRow({
       )}
     >
       <div className="flex items-center justify-between gap-2">
+        {/* Destructive actions live behind this, and it sits at the far edge from the
+            56px complete button — the one target that must never be mis-hit */}
+        {onOpenMenu && (
+          <button
+            type="button"
+            aria-label={`Options for ${label}`}
+            disabled={!editable}
+            onClick={onOpenMenu}
+            className={cn(
+              '-ml-1 flex size-11 shrink-0 items-center justify-center rounded-lg',
+              'text-faint active:bg-muted [&_svg]:size-5',
+              !editable && 'opacity-50',
+            )}
+          >
+            <EllipsisVertical aria-hidden />
+          </button>
+        )}
         <span
           className={cn(
-            'min-w-0 truncate text-sm font-medium',
+            'min-w-0 flex-1 truncate text-sm font-medium',
             completed ? 'text-muted-foreground' : 'text-foreground',
           )}
         >

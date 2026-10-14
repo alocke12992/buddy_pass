@@ -6,13 +6,16 @@ import {
   builderFromDoc,
   builderToInput,
   buildSuperset,
+  duplicateSet,
   emptyBuilder,
   linkWithPrevious,
   moveExercise,
   removeExercise,
+  removeSet,
   replaceExercise,
   toggleExercise,
   unlinkFromSuperset,
+  updateSet,
 } from './state';
 
 const entry = (id: string): ExerciseIndexEntry => ({
@@ -234,5 +237,86 @@ describe('doc round-trip', () => {
       { position: 0, isWarmup: true, reps: 12, weightKg: 40, restSeconds: 60 },
       { position: 1, isWarmup: false, reps: 8, weightKg: 60, restSeconds: 90 },
     ]);
+  });
+});
+
+describe('set editing', () => {
+  const oneExercise = () => {
+    const s = addExercise(emptyBuilder(), entry('a'));
+    return { state: s, key: s.exercises[0]!.key };
+  };
+
+  it('updateSet patches only the targeted set', () => {
+    const { state, key } = oneExercise();
+    const [first, second] = state.exercises[0]!.sets;
+    const next = updateSet(state, key, second!.key, { reps: 5, weightKg: 100 });
+    expect(next.exercises[0]!.sets[1]).toMatchObject({ reps: 5, weightKg: 100 });
+    expect(next.exercises[0]!.sets[0]).toEqual(first);
+  });
+
+  it('updateSet leaves other exercises untouched', () => {
+    const { state, key } = oneExercise();
+    const withSecond = addExercise(state, entry('b'));
+    const untouched = withSecond.exercises[1]!;
+    const next = updateSet(withSecond, key, withSecond.exercises[0]!.sets[0]!.key, { reps: 3 });
+    expect(next.exercises[1]).toEqual(untouched);
+  });
+
+  it('duplicateSet inserts a copy right after the original under a new key', () => {
+    const { state, key } = oneExercise();
+    const edited = updateSet(state, key, state.exercises[0]!.sets[0]!.key, {
+      reps: 12,
+      weightKg: 42.5,
+      isWarmup: true,
+    });
+    const target = edited.exercises[0]!.sets[0]!;
+    const next = duplicateSet(edited, key, target.key);
+    const sets = next.exercises[0]!.sets;
+    expect(sets).toHaveLength(4);
+    expect(sets[1]).toMatchObject({ reps: 12, weightKg: 42.5, isWarmup: true });
+    expect(sets[1]!.key).not.toBe(target.key);
+  });
+
+  it('removeSet takes out just that set, and an unknown key changes nothing', () => {
+    const { state, key } = oneExercise();
+    const sets = state.exercises[0]!.sets;
+    const next = removeSet(state, key, sets[1]!.key);
+    expect(next.exercises[0]!.sets.map((s) => s.key)).toEqual([sets[0]!.key, sets[2]!.key]);
+    expect(removeSet(state, key, 'nope').exercises[0]!.sets).toHaveLength(3);
+  });
+
+  it('an exercise can be emptied of sets', () => {
+    const { state, key } = oneExercise();
+    const emptied = state.exercises[0]!.sets.reduce((s, set) => removeSet(s, key, set.key), state);
+    expect(emptied.exercises[0]!.sets).toEqual([]);
+  });
+
+  it('addSet on an emptied exercise falls back to the 3×8 default shape', () => {
+    const { state, key } = oneExercise();
+    const emptied = state.exercises[0]!.sets.reduce((s, set) => removeSet(s, key, set.key), state);
+    const next = addSet(emptied, key);
+    expect(next.exercises[0]!.sets).toHaveLength(1);
+    expect(next.exercises[0]!.sets[0]).toMatchObject({
+      isWarmup: false,
+      reps: 8,
+      weightKg: 0,
+      restSeconds: 90,
+    });
+  });
+});
+
+describe('moveExercise guards', () => {
+  it('is a no-op for a drag that lands where it started or out of bounds', () => {
+    const s = threeExercises();
+    expect(moveExercise(s, 1, 1)).toBe(s);
+    expect(moveExercise(s, -1, 0)).toBe(s);
+    expect(moveExercise(s, 0, -1)).toBe(s);
+  });
+
+  it('reorders without touching set configuration', () => {
+    const s = threeExercises();
+    const moved = moveExercise(s, 0, 2);
+    expect(moved.exercises.map((e) => e.exercise.id)).toEqual(['b', 'c', 'a']);
+    expect(moved.exercises[2]!.sets).toBe(s.exercises[0]!.sets);
   });
 });

@@ -1,6 +1,6 @@
 # Buddy Pass
 
-Multiplayer workouts — build workouts, share them with friends, then track and compare your progress together.
+Multiplayer workouts — create workouts, share them with friends, then track and compare your progress as a group.
 
 Plan: [plans/MVP.md](plans/MVP.md) (refined from [plans/INIT.md](plans/INIT.md)) · Infra: [plans/INFRA.md](plans/INFRA.md)
 

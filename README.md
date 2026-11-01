@@ -45,4 +45,5 @@ Runs on AWS (dedicated account, **us-west-2**) at **https://buddy-pass.com** —
 - All timestamps `timestamptz` UTC; weights stored in kg; UUIDv7 ids
 - Workspace packages are consumed as TypeScript source (`exports` → `src/`)
 - API is the only deployable that touches the database
+
 eu-e2e-test: safe to close

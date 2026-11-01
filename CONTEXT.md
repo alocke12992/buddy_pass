@@ -60,3 +60,4 @@ _Avoid_: weight entry, body measurement (the table name, not the term)
 **Volume**:
 Σ (reps × weight in kg) over completed, non-warm-up sets of completed workouts. The core progress metric.
 _Avoid_: tonnage, total weight lifted
+eu-e2e-test: safe to close

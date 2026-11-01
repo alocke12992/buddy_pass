@@ -7,7 +7,7 @@
 ### People & access
 
 **Guest**:
-A user on an anonymous session — full product access (clone, build, log) but cannot mint links. Purged after 90 days of inactivity.
+A user on an anonymous session — full product access (clone, build, log) but unable to mint links. Purged after 90 days without activity.
 _Avoid_: anonymous user, visitor
 
 **Registered user**:

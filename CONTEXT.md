@@ -11,7 +11,7 @@ A user on an anonymous session — full product access (clone, build, log) but u
 _Avoid_: anonymous user, visitor
 
 **Registered user**:
-A user who holds a real (non-anonymous) account. Only registered users can mint share links and friend links.
+A user who holds a real (non-anonymous) account. Only registered users are able to mint share links and friend links.
 
 **Friend**:
 A user connected via a mutual, accepted friendship — always established by opening a friend link. "Buddy" is brand voice (app name, UI copy), not a distinct concept.

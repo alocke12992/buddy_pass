@@ -1,17 +1,17 @@
 # Buddy Pass
 
-"Multiplayer" workout tracking: create, share, and clone workouts with friends and compare progress. Single context.
+"Multiplayer" workout tracking: build, share, and clone workouts with friends, then compare progress together as a group. Single context.
 
 ## Language
 
 ### People & access
 
 **Guest**:
-A user on an anonymous session — full product access (clone, build, log) but cannot mint links. Purged after 90 days of inactivity.
+A user on an anonymous session — full product access (clone, build, log) but unable to mint links. Purged after 90 days without activity.
 _Avoid_: anonymous user, visitor
 
 **Registered user**:
-A user with a real (non-anonymous) account. Only registered users can mint share links and friend links.
+A user who holds a real (non-anonymous) account. Only registered users are able to mint share links and friend links.
 
 **Friend**:
 A user connected via a mutual, accepted friendship — always established by opening a friend link. "Buddy" is brand voice (app name, UI copy), not a distinct concept.
@@ -60,3 +60,4 @@ _Avoid_: weight entry, body measurement (the table name, not the term)
 **Volume**:
 Σ (reps × weight in kg) over completed, non-warm-up sets of completed workouts. The core progress metric.
 _Avoid_: tonnage, total weight lifted
+eu-e2e-test: safe to close

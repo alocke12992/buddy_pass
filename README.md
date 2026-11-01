@@ -1,6 +1,6 @@
 # Buddy Pass
 
-Multiplayer workouts — create and share workouts with friends, track and compare progress.
+Multiplayer workouts — create workouts, share them with your friends, then track and compare progress together as a group.
 
 Plan: [plans/MVP.md](plans/MVP.md) (refined from [plans/INIT.md](plans/INIT.md)) · Infra: [plans/INFRA.md](plans/INFRA.md)
 
@@ -45,3 +45,5 @@ Runs on AWS (dedicated account, **us-west-2**) at **https://buddy-pass.com** —
 - All timestamps `timestamptz` UTC; weights stored in kg; UUIDv7 ids
 - Workspace packages are consumed as TypeScript source (`exports` → `src/`)
 - API is the only deployable that touches the database
+
+eu-e2e-test: safe to close

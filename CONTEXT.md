@@ -1,6 +1,6 @@
 # Buddy Pass
 
-"Multiplayer" workout tracking: create, share, and clone workouts with friends, then compare progress. Single context.
+"Multiplayer" workout tracking: build, share, and clone workouts with friends, then compare your progress. Single context.
 
 ## Language
 
